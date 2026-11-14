@@ -71,6 +71,11 @@ describe("chooseListingTool", () => {
     expect(chooseListingTool(["read", "write", "glob"])).toBeUndefined();
     expect(chooseListingTool([])).toBeUndefined();
   });
+
+  it('"dir" is refused — mkdir-semantics planes must not be dispatched blind', () => {
+    expect(chooseListingTool(["dir"])).toBeUndefined();
+    expect(chooseListingTool(["Dir", "read_dir"])).toBe("read_dir");
+  });
 });
 
 describe("listingArgsFor", () => {
@@ -107,5 +112,12 @@ describe("listingArgsFor", () => {
   it("is undefined when the declared schema names no usable directory parameter", () => {
     const def = { inputSchema: { properties: { query: { type: "string" } } } };
     expect(listingArgsFor(def, "/tmp/x")).toBeUndefined();
+  });
+
+  it("counts boolean-form property schemas for a required pattern", () => {
+    const def = {
+      inputSchema: { properties: { path: true, pattern: true }, required: ["path", "pattern"] },
+    };
+    expect(listingArgsFor(def, "/d")).toEqual({ path: "/d", pattern: "*" });
   });
 });

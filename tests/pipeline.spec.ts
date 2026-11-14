@@ -518,6 +518,65 @@ describe("runPipeline — routing & kind rules (2 / 10) and the truncation hint"
     expect(outcome.result.error).toMatchObject({ message: "Unknown tool: bash" });
   });
 
+  it("adopts a REAL failure from the canonical dispatch over the stale UNKNOWN_TOOL", async () => {
+    const tools = {
+      get: () => undefined,
+      schemas: () => [{ name: "mcp__shell__bash" }],
+      execute: async () => ({
+        isError: true,
+        error: new Error("command failed: ls: /nope: No such file or directory"),
+      }),
+    } as never;
+
+    const exec = makeExec({ name: "bash", arguments: { command: "ls /nope" } });
+    const outcome = await runPipeline(
+      exec,
+      async () => ({
+        isError: true,
+        error: Object.assign(new Error("Unknown tool: bash"), { code: "UNKNOWN_TOOL" }),
+      }),
+      CONFIG,
+      SESSION,
+      { tools },
+    );
+
+    // The call the model MEANT ran and failed — its error is authoritative
+    // (same settle semantics as the bridge), not the false "Unknown tool".
+    expect(outcome.wasHealed).toBe(true);
+    expect(outcome.category).toBe("TOOL_NAME");
+    expect(outcome.result.error).toMatchObject({
+      message: "command failed: ls: /nope: No such file or directory",
+    });
+  });
+
+  it("keeps the original error when the canonical name is unknown AGAIN", async () => {
+    const tools = {
+      get: () => undefined,
+      schemas: () => [{ name: "mcp__shell__bash" }], // enumeration is stale
+      execute: async () => ({
+        isError: true,
+        error: Object.assign(new Error("Unknown tool: mcp__shell__bash"), {
+          code: "UNKNOWN_TOOL",
+        }),
+      }),
+    } as never;
+
+    const exec = makeExec({ name: "bash", arguments: { command: "ls" } });
+    const outcome = await runPipeline(
+      exec,
+      async () => ({
+        isError: true,
+        error: Object.assign(new Error("Unknown tool: bash"), { code: "UNKNOWN_TOOL" }),
+      }),
+      CONFIG,
+      SESSION,
+      { tools },
+    );
+
+    expect(outcome.wasHealed).toBe(false);
+    expect(outcome.result.error).toMatchObject({ message: "Unknown tool: bash" });
+  });
+
   it("lists a directory the file reader hit, via the plane's listing tool (KIND_CORRECTION)", async () => {
     const nested: Array<{ name: string; arguments: unknown }> = [];
     const tools = {

@@ -52,4 +52,9 @@ describe('canonicalToolName', () => {
   it("exact case-insensitive match outranks an affix candidate", () => {
     expect(canonicalToolName("Read", ["read", "mcp__fs__read"])).toBe("read");
   });
+
+  it("a registered empty name never becomes the canonical name", () => {
+    // "bash_" ends with "_", which would affix-match an empty candidate.
+    expect(canonicalToolName("bash_", [""])).toBeUndefined();
+  });
 });

@@ -53,7 +53,15 @@ export const toolNameStage: PostStage = {
       exec.arguments ?? {},
       `tool-name-${canonical}`,
     );
-    if (result.isError === true) return undefined; // the original error stands
+    // Same settle semantics as the bridge: the canonical dispatch ran the
+    // call the model actually MEANT, so whatever the host produced is the
+    // authoritative answer — discarding a real error would leave the stale,
+    // false "Unknown tool" standing. The one exception: a second
+    // UNKNOWN_TOOL means the enumeration is stale for this call, and the
+    // original (clearer) error stands.
+    if (result.isError === true && resultHasCode(result, "UNKNOWN_TOOL")) {
+      return undefined;
+    }
     return {
       result,
       preview: `Dispatched as ${canonical}`,

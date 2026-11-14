@@ -50,7 +50,8 @@ export function canonicalToolName(
   let ambiguous = false;
   for (const candidate of registeredNames) {
     const hay = candidate.toLowerCase();
-    if (hay === needle || candidate === called) continue;
+    // A registered empty name would affix-match anything ("x_" ends with "_").
+    if (hay === "" || hay === needle || candidate === called) continue;
     const related = AFFIXES.some(
       (sep) => hay.endsWith(sep + needle) || needle.endsWith(sep + hay),
     );

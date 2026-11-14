@@ -52,7 +52,12 @@ export function directoryFromArgs(rawArgs: unknown): string | undefined {
   return undefined;
 }
 
-/** Listing-tool candidates, most common spelling first. */
+/**
+ * Listing-tool candidates, most common spelling first. "dir" is deliberately
+ * NOT a candidate: on some MCP planes it creates directories (mkdir
+ * semantics) — a dispatch to it could SUCCEED and be mis-recorded as a
+ * listing, feeding the model make-dir output where it wanted contents.
+ */
 const LISTING_TOOLS = [
   "list_directory",
   "read_dir",
@@ -60,7 +65,6 @@ const LISTING_TOOLS = [
   "list_files",
   "read_directory",
   "ls",
-  "dir",
 ] as const;
 
 /**
@@ -104,7 +108,9 @@ export function listingArgsFor(
   const directoryKey = DIRECTORY_PARAMS.find((key) => key in props);
   if (directoryKey === undefined) return undefined;
   const args: Record<string, unknown> = { [directoryKey]: dir };
-  if (required.has("pattern") && typeof props["pattern"] === "object") args["pattern"] = "*";
+  // Boolean-form property schemas (`pattern: true`) still count as declared —
+  // the argument is only added when pattern is REQUIRED, so presence suffices.
+  if (required.has("pattern") && props["pattern"] !== undefined) args["pattern"] = "*";
   return args;
 }
 
