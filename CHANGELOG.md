@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- **Shipped rule tables stay host-neutral (publication decision).** The
+  alias table and the path-quote tool family each carried one entry for a
+  single host's MCP vision bridge (`modlens_read_image`) — a rule promoted
+  from one operator's usage, not a research class. Published defaults now
+  cover research-backed failure classes on DSH built-in tools only; site
+  tools are each installation's own promotion. Tests repurposed to pin the
+  boundary.
+
 ### Added
 
 - **`$ref`-declared properties get the narrowest coercion (rule 9 family 1).**

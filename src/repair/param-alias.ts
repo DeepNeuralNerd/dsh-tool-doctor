@@ -47,7 +47,6 @@ const TOOL_ALIASES: Readonly<Record<string, readonly AliasRule[]>> = {
     { canonical: "pattern", aliases: ["regex", "search_pattern"] },
   ],
   read_image: [{ canonical: "file_path", aliases: ["path", "image_path", "image"] }],
-  modlens_read_image: [{ canonical: "path", aliases: ["file_path", "image_path"] }],
 };
 
 /**

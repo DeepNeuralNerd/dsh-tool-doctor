@@ -75,12 +75,12 @@ describe("dequotePathArgs", () => {
     expect((out as Record<string, unknown>).file_path).toBe("C:\\Users\\me\\docs\\CHANGELOG.md");
   });
 
-  it("unwraps a quoted path parameter for modlens_read_image", () => {
+  it("leaves a site-local tool outside the published family", () => {
+    // modlens_read_image (one host's MCP vision bridge) was removed from
+    // PATH_TOOLS 2026-11-14: shipped rule tables cover DSH built-ins only;
+    // per-site tool entries are that host's promotion, not a general rule.
     const args = { path: '"C:/Users/me/shot.png"', prompt: "read it" };
-    const out = dequotePathArgs("modlens_read_image", args);
-    expect(out).toBeDefined();
-    expect((out as Record<string, unknown>).path).toBe("C:/Users/me/shot.png");
-    expect((out as Record<string, unknown>).prompt).toBe("read it");
+    expect(dequotePathArgs("modlens_read_image", args)).toBeUndefined();
   });
 
   it("returns undefined when no path parameter is wrapped", () => {

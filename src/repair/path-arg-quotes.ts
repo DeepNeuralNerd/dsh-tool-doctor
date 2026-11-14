@@ -27,7 +27,12 @@
  * @module dsh-tool-doctor/repair/path-arg-quotes
  */
 
-/** File tools whose path parameters take a plain absolute-path string. */
+/**
+ * File tools whose path parameters take a plain absolute-path string.
+ * DSH built-ins ONLY: the published rule tables stay research-based and
+ * host-neutral — entries for a site's own MCP tools (e.g. a vision-bridge
+ * loader) are that host's promotion, not a general rule (decision 2026-11-14).
+ */
 const PATH_TOOLS: ReadonlySet<string> = new Set([
   "read",
   "write",
@@ -35,7 +40,6 @@ const PATH_TOOLS: ReadonlySet<string> = new Set([
   "glob",
   "grep",
   "read_image",
-  "modlens_read_image",
 ]);
 
 /** Parameter names on those tools that are file/directory paths. */

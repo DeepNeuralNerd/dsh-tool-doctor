@@ -44,13 +44,12 @@ describe("renameAliasArgs — canonical parameter rename", () => {
   });
 
   it("respects a tool that legitimately owns the alias name itself", () => {
-    // modlens_read_image's own parameter is `path` — grep's dir→path alias
-    // must not fire where `path` is a real property in its own right.
-    const MODLENS_DEF = def({ path: { type: "string" }, prompt: { type: "string" } });
-    expect(renameAliasArgs("modlens_read_image", { path: "C:\\a.png" }, MODLENS_DEF)).toBeUndefined();
-    // …while file_path is an ALIAS there, so it renames to path.
-    const out = renameAliasArgs("modlens_read_image", { file_path: "C:\\a.png" }, MODLENS_DEF);
-    expect(out?.args).toEqual({ path: "C:\\a.png" });
+    // glob canonically OWNS `path`: an existing `path` argument is real and
+    // must never be renamed away, while its own `dir` alias renames TO path.
+    const GLOB_DEF = def({ path: { type: "string" }, pattern: { type: "string" } });
+    expect(renameAliasArgs("glob", { path: "C:\\a", pattern: "*" }, GLOB_DEF)).toBeUndefined();
+    const out = renameAliasArgs("glob", { dir: "C:\\a", pattern: "*" }, GLOB_DEF);
+    expect(out?.args).toEqual({ path: "C:\\a", pattern: "*" });
   });
 
   it("never mutates the caller's arguments object", () => {
