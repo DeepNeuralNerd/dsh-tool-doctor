@@ -29,7 +29,13 @@ The plugin handles mechanical patterns. It cannot infer a model's intent, make a
 
 ## Use it in DSH
 
-Build the package with `npm run check`, then install and enable it in DSH Plugin Manager. Open **Tool doctor** there to review activity and adjust rules. If you replace the package while DSH is running, reload the plugin or restart DSH so the host uses the new bundle.
+Install the published GitHub repository into your DSH web profile:
+
+```bash
+dsh plugin --profile web add github:DeepNeuralNerd/dsh-tool-doctor
+```
+
+Restart DSH after installation so the host loads the plugin. Then open **Settings → Plugins → Installed → Tool doctor** to review activity and adjust rules. The plugin's repairs are enabled by default; you can switch individual rules off in its dashboard.
 
 Rules are enabled by default. The dashboard can turn them on or off without a restart. Rule overrides are saved under the DSH home directory. Model guidance edits take effect immediately in the running process but return to the factory default after a plugin restart.
 
