@@ -16,6 +16,7 @@ export const readArgsStage: PreStage = {
   id: "read-args",
   label: "Read argument correction (READ_ARGS)",
   ruleNumber: 1,
+  enabledBy: "autoClampRanges",
   category: "READ_ARGS",
   roundTrips: 1,
   matchesError: (code, text) =>

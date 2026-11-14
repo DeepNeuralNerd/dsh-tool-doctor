@@ -19,15 +19,39 @@
  * @module dsh-tool-doctor/support/error-signatures
  */
 
-import type { HealCategory } from "../types.ts";
+import type { ConfigFlag, DoctorConfig, HealCategory } from "../types.ts";
 import type { NormalizerRecord } from "./tracker.ts";
-import { CATEGORY_META } from "../stages/index.ts";
+import { CATEGORY_META, CATEGORY_TO_FLAG } from "../stages/index.ts";
 
 /** How the existing rule set relates to one error pattern. */
 export type CandidateVerdict =
   | "attempted-failed"
   | "possible-existing"
   | "new-rule-candidate";
+
+/**
+ * What the panel can offer as a fix for one recurring pattern. `enable-flag`
+ * is one-click actionable (the owning rule is switched off); the others are
+ * guidance for the operator, not a runtime action.
+ */
+export type ProposedFixKind = "enable-flag" | "gate-gap" | "refine-rule" | "new-rule";
+
+export interface ProposedFix {
+  kind: ProposedFixKind;
+  /** Toggle that resolves the fix, when one does. */
+  flag?: ConfigFlag;
+  /** Healing rule involved, when one is. */
+  rule?: number;
+}
+
+/**
+ * Fix-proposal eligibility. A single unlucky call is not a pattern: the panel
+ * only offers fixes once the SAME signature has failed repeatedly AND over a
+ * meaningful span of time — enough evidence that acting is justified rather
+ * than reacting to noise.
+ */
+export const FIX_PROPOSE_MIN_COUNT = 3;
+export const FIX_PROPOSE_MIN_SPAN_MS = 10 * 60 * 1000;
 
 /** One recurring unhealed error pattern. */
 export interface ErrorCandidate {
@@ -41,6 +65,13 @@ export interface ErrorCandidate {
   verdict: CandidateVerdict;
   /** 1-based healing-rule number the pattern maps to, when one does. */
   ruleHint?: number;
+  /**
+   * Whether enough evidence has accumulated (recurrence × elapsed span) to
+   * offer a fix. Until true, the pattern is under observation only.
+   */
+  fixable: boolean;
+  /** Offered fix, present once `fixable`. */
+  proposedFix?: ProposedFix;
   /** Categories observed under this signature (deduplicated). */
   categories: HealCategory[];
   /** Evidence from the most recent matching record. */
@@ -63,6 +94,52 @@ export const CATEGORY_TO_RULE: Partial<Record<HealCategory, number>> =
       .map((category) => [category, CATEGORY_META[category].ruleNumber])
       .filter((entry): entry is [HealCategory, number] => entry[1] !== undefined),
   );
+
+/**
+ * Config flags whose stages carry each rule's repairs, in registry order.
+ * Derived from the same registry as the categories; a rule spans several
+ * stages (rule 1 covers run-code AND the clamp family), so a fix proposal
+ * picks the first currently-DISABLED flag of the rule when one exists.
+ */
+export const RULE_FLAGS: ReadonlyMap<number, readonly ConfigFlag[]> = (() => {
+  const map = new Map<number, ConfigFlag[]>();
+  for (const category of Object.keys(CATEGORY_TO_RULE) as HealCategory[]) {
+    const rule = CATEGORY_TO_RULE[category];
+    const flag = CATEGORY_TO_FLAG[category];
+    if (rule === undefined || flag === undefined) continue;
+    const list = map.get(rule) ?? [];
+    if (!list.includes(flag)) list.push(flag);
+    map.set(rule, list);
+  }
+  return map;
+})();
+
+/**
+ * The fix offered for one pattern given the effective config: a rule that is
+ * switched off is a one-click fix; an on-but-skipped rule is a gate gap for
+ * the operator to refine; a failed attempt asks for rule refinement; an
+ * uncovered pattern is raw material for a new rule.
+ */
+export function proposeFix(
+  verdict: CandidateVerdict,
+  ruleHint: number | undefined,
+  config?: DoctorConfig,
+): ProposedFix {
+  if (verdict === "attempted-failed") return { kind: "refine-rule", rule: ruleHint };
+  if (verdict === "possible-existing" && ruleHint !== undefined) {
+    const flags = RULE_FLAGS.get(ruleHint) ?? [];
+    const off = config === undefined ? undefined : flags.find((f) => config[f] === false);
+    if (off !== undefined) return { kind: "enable-flag", flag: off, rule: ruleHint };
+    return { kind: "gate-gap", rule: ruleHint, ...(flags[0] ? { flag: flags[0] } : {}) };
+  }
+  if (verdict === "new-rule-candidate") return { kind: "new-rule" };
+  return { kind: "gate-gap", ...(ruleHint !== undefined ? { rule: ruleHint } : {}) };
+}
+
+/** Enough recurrences over enough elapsed time to justify offering a fix. */
+export function fixEligible(count: number, firstSeen: number, lastSeen: number): boolean {
+  return count >= FIX_PROPOSE_MIN_COUNT && lastSeen - firstSeen >= FIX_PROPOSE_MIN_SPAN_MS;
+}
 
 /**
  * Error-text hints toward an existing rule for failures no rule processed.
@@ -136,10 +213,14 @@ interface CandidateGroup {
  * Group failed records into deduplicated recurring error candidates.
  * @param records - Tracker records (any status); only failures are grouped.
  * @param limit - Maximum candidates returned (default 60).
+ * @param config - Effective flags, used to turn a coverage gap into a concrete
+ *   "enable the owning rule" proposal; omitted means proposals are given
+ *   without flag resolution.
  */
 export function buildErrorCandidates(
   records: readonly NormalizerRecord[],
   limit = 60,
+  config?: DoctorConfig,
 ): ErrorCandidate[] {
   const groups = new Map<string, CandidateGroup>();
   for (const record of records) {
@@ -191,6 +272,7 @@ export function buildErrorCandidates(
       verdict = hinted !== undefined ? "possible-existing" : "new-rule-candidate";
       ruleHint = hinted;
     }
+    const fixable = fixEligible(group.count, group.firstSeen, group.lastSeen);
     candidates.push({
       key: group.key,
       toolName: group.toolName,
@@ -200,6 +282,8 @@ export function buildErrorCandidates(
       lastSeen: group.lastSeen,
       verdict,
       ruleHint,
+      fixable,
+      ...(fixable ? { proposedFix: proposeFix(verdict, ruleHint, config) } : {}),
       categories: [...group.categories],
       sample: {
         errorMessage: group.latest.errorMessage ?? "",

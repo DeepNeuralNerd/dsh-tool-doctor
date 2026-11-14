@@ -21,6 +21,7 @@ import {
 import { dispatchStatus, errorText, resultErrorText } from "./core/result.ts";
 import { objectValue, sessionCwd } from "./core/util.ts";
 import { CATEGORY_META } from "./stages/index.ts";
+import { buildErrorCandidates } from "./support/error-signatures.ts";
 import {
   loadOverrides,
   saveOverrides,
@@ -422,7 +423,9 @@ export function apply(ctxRaw: unknown, userConfig: Partial<DoctorConfig> = {}): 
         kind: "exact",
         path: "/plugin-api/tool-doctor/stats",
         handler: (_req, res) => {
-          json(res, 200, tracker.getSnapshot());
+          // breakerOpen: categories whose retry circuit is currently open, so
+          // the panel can show "retries paused" instead of silent inactivity.
+          json(res, 200, { ...tracker.getSnapshot(), breakerOpen: breaker.openCategories() });
         },
       });
       const disposeReset = server.register({
@@ -509,10 +512,15 @@ export function apply(ctxRaw: unknown, userConfig: Partial<DoctorConfig> = {}): 
         kind: "exact",
         path: "/plugin-api/tool-doctor/candidates",
         handler: (_req, res) => {
-          // Error-candidate panel data is computed in the client from the stats
-          // snapshot; this route exists so the feed surface is complete and a
-          // future server-side grouping has its slot.
-          json(res, 200, { candidates: [] });
+          // Same grouping the client applies to the stats snapshot, resolved
+          // against the live config so coverage gaps name the exact toggle.
+          json(res, 200, {
+            candidates: buildErrorCandidates(
+              tracker.getSnapshot().recentRecords,
+              60,
+              config,
+            ),
+          });
         },
       });
       return () => {

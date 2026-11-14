@@ -25,6 +25,7 @@ export const observeRetryStage: PostStage = {
   id: "observe-retry",
   label: "Retry after file observation (FS_OBSERVED)",
   ruleNumber: 4,
+  enabledBy: "autoObserveFiles",
   category: "FS_OBSERVED",
   roundTrips: 2,
   inspect(exec, result, env) {

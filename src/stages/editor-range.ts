@@ -19,6 +19,7 @@ export const editorRangeStage: PreStage = {
   id: "editor-range",
   label: "Editor range & session path (RANGE_CLAMP)",
   ruleNumber: 3,
+  enabledBy: "autoClampRanges",
   category: "RANGE_CLAMP",
   roundTrips: 1,
   matchesError: (code, text) =>

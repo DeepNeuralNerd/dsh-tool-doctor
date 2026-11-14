@@ -22,6 +22,7 @@ export const anchorRefreshStage: PostStage = {
   id: "anchor-refresh",
   label: "Anchor-failure observation refresh (FS_OBSERVED)",
   ruleNumber: 4,
+  enabledBy: "autoObserveFiles",
   category: "FS_OBSERVED",
   claimsHeal: false,
   inspect(exec, result, env) {

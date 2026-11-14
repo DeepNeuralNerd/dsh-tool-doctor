@@ -19,6 +19,7 @@
 
 import type {
   HealCategory,
+  ConfigFlag,
   DoctorConfig,
   ToolDispatchExecution,
   ToolExecutionResult,
@@ -86,6 +87,8 @@ export interface PreStage {
    * omit it and declare their categories explicitly in the registry.
    */
   readonly category?: HealCategory;
+  /** Config flag that gates this stage — lets the panel offer "turn it on" as a fix. */
+  readonly enabledBy?: ConfigFlag;
   /** Model round-trips a successful heal removes (token-meter input). Default 1. */
   readonly roundTrips?: number;
   /** Honest attribution: does the final error plausibly belong to this class? */
@@ -106,6 +109,8 @@ export interface PostStage {
   readonly ruleNumber: number;
   /** Static category this stage owns (feeds CATEGORY_META derivation). */
   readonly category?: HealCategory;
+  /** Config flag that gates this stage — lets the panel offer "turn it on" as a fix. */
+  readonly enabledBy?: ConfigFlag;
   /** Model round-trips a successful recovery removes (token-meter input). Default 1. */
   readonly roundTrips?: number;
   /** Honest attribution: does the final error plausibly belong to this class? */

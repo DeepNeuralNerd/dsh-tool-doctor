@@ -20,6 +20,7 @@ export const mnemonResultStage: PreStage = {
   id: "mnemon-result",
   label: "mnemon result schema repair (MNEMON_RESULT)",
   ruleNumber: 1,
+  enabledBy: "autoClampRanges",
   category: "MNEMON_RESULT",
   roundTrips: 1,
   matchesError: (code, text) =>

@@ -40,6 +40,8 @@ describe("CircuitBreaker", () => {
     for (let i = 0; i < 3; i++) breaker.recordFailure("cat");
     expect(breaker.allow("cat")).toBe(false);
     c.advance(1500); // all failures slide out of the window
+    // A cooled-down circuit must not be reported open to the stats feed.
+    expect(breaker.openCategories()).not.toContain("cat");
     expect(breaker.allow("cat")).toBe(true);
   });
 

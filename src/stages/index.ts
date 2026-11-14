@@ -17,7 +17,7 @@
 
 import type { HealStage, PostStage, PreStage } from "../core/stage.ts";
 import { isPostStage, isPreStage } from "../core/stage.ts";
-import type { HealCategory } from "../types.ts";
+import type { ConfigFlag, HealCategory } from "../types.ts";
 
 import { runCodeStage } from "./run-code.ts";
 import { editorRangeStage } from "./editor-range.ts";
@@ -60,6 +60,8 @@ export interface CategoryMeta {
   readonly label: string;
   /** Healing-rule number used by error-candidate mapping (absent for non-rules). */
   readonly ruleNumber?: number;
+  /** Config flag whose toggle gates this category's repairs (fix-proposal input). */
+  readonly enabledBy?: ConfigFlag;
   /** Model round-trips a successful heal removes (token-meter input). Default 1. */
   readonly roundTrips?: number;
   /** Honest attribution: does the final error plausibly belong to this class? */
@@ -75,6 +77,7 @@ const RUN_CODE_SUBCATEGORIES: Record<string, CategoryMeta> = {
   INVALID_ARGS: {
     label: "Missing/misplaced args (INVALID_ARGS)",
     ruleNumber: 1,
+    enabledBy: "autoWrapRunCode",
     roundTrips: 1,
     matchesError: (code, text) =>
       code === "INVALID_ARGS" || /offset|start|limit/i.test(text ?? ""),
@@ -82,6 +85,7 @@ const RUN_CODE_SUBCATEGORIES: Record<string, CategoryMeta> = {
   CODE_WRAP: {
     label: "Code fence cleanup (CODE_WRAP)",
     ruleNumber: 1,
+    enabledBy: "autoWrapRunCode",
     roundTrips: 1,
     matchesError: (code, text) =>
       code === "INVALID_ARGS" || /offset|start|limit/i.test(text ?? ""),
@@ -89,6 +93,7 @@ const RUN_CODE_SUBCATEGORIES: Record<string, CategoryMeta> = {
   RUN_CODE_DESC: {
     label: "run_code description fill (RUN_CODE_DESC)",
     ruleNumber: 1,
+    enabledBy: "autoWrapRunCode",
     roundTrips: 1,
     matchesError: (code, text) =>
       code === "INVALID_ARGS" || /offset|start|limit/i.test(text ?? ""),
@@ -96,6 +101,7 @@ const RUN_CODE_SUBCATEGORIES: Record<string, CategoryMeta> = {
   RUN_CODE_SYNTAX: {
     label: "run_code syntax healing (RUN_CODE_SYNTAX)",
     ruleNumber: 1,
+    enabledBy: "autoWrapRunCode",
     roundTrips: 1,
     // A syntax-like message only attributes honestly when the host actually
     // failed to run the program; a semantic failure is an unrelated error.
@@ -108,6 +114,7 @@ const RUN_CODE_SUBCATEGORIES: Record<string, CategoryMeta> = {
   INNER_DESC: {
     label: "Inner-call description fill (INNER_DESC)",
     ruleNumber: 1,
+    enabledBy: "autoWrapRunCode",
     roundTrips: 1,
     matchesError: (code, text) =>
       code === "INVALID_ARGS" || /required property|invalid arguments|description/i.test(text ?? ""),
@@ -120,6 +127,7 @@ const NON_STAGE_META: Record<string, CategoryMeta> = {
   RESPONSE_TOOL_HEAL: {
     label: "In-text tool-call promotion (RESPONSE_TOOL_HEAL)",
     ruleNumber: 7,
+    enabledBy: "healResponseTools",
   },
 };
 
@@ -136,6 +144,7 @@ export const CATEGORY_META = (() => {
       label: stage.label,
       ruleNumber: stage.ruleNumber,
       roundTrips: stage.roundTrips ?? 1,
+      ...(stage.enabledBy ? { enabledBy: stage.enabledBy } : {}),
       ...(stage.matchesError ? { matchesError: stage.matchesError } : {}),
     };
   }
@@ -144,6 +153,18 @@ export const CATEGORY_META = (() => {
     CategoryMeta
   >;
 })();
+
+/**
+ * Config flag whose toggle gates the repairs recorded under each category.
+ * Derived like the labels; PASSTHROUGH (no rule) is deliberately absent.
+ * The fix-proposal flow reads this to offer "turn the owning rule on".
+ */
+export const CATEGORY_TO_FLAG: Partial<Record<HealCategory, ConfigFlag>> =
+  Object.fromEntries(
+    (Object.keys(CATEGORY_META) as HealCategory[])
+      .map((category) => [category, CATEGORY_META[category].enabledBy])
+      .filter((entry): entry is [HealCategory, ConfigFlag] => entry[1] !== undefined),
+  );
 
 /** Panel labels for every category — the client's single source of truth. */
 export const CATEGORY_LABELS: Readonly<Record<string, string>> = Object.fromEntries(

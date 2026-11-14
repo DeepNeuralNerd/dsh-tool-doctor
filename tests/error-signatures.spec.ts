@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildErrorCandidates, normalizeErrorSignature } from "../src/support/error-signatures.ts";
+import {
+  buildErrorCandidates,
+  fixEligible,
+  normalizeErrorSignature,
+} from "../src/support/error-signatures.ts";
 import type { NormalizerRecord } from "../src/support/tracker.ts";
+import type { DoctorConfig } from "../src/types.ts";
 
 function failedRecord(overrides: Partial<NormalizerRecord> = {}): NormalizerRecord {
   return {
@@ -116,5 +121,101 @@ describe("buildErrorCandidates", () => {
       failedRecord({ id: `r${i}`, errorMessage: `distinct failure ${word} zzz` }),
     );
     expect(buildErrorCandidates(records, 3)).toHaveLength(3);
+  });
+});
+
+describe("fix proposals", () => {
+  const CONFIG: DoctorConfig = {
+    autoWrapRunCode: true,
+    autoBridgeDirectTools: true,
+    autoObserveFiles: true,
+    autoClampRanges: true,
+    injectPrompt: false,
+    errorHints: true,
+    persistPassthrough: false,
+    healResponseTools: true,
+    shadowMode: false,
+  };
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  /** Three failures of one signature, spanning more than the eligibility window. */
+  function recurring(toolFailure: string): NormalizerRecord[] {
+    const base = Date.now() - DAY_MS;
+    return [
+      failedRecord({ time: base, errorMessage: toolFailure }),
+      failedRecord({ time: base + 6 * 60 * 1000, errorMessage: toolFailure }),
+      failedRecord({ time: base + 20 * 60 * 1000, errorMessage: toolFailure }),
+    ];
+  }
+
+  it("fixEligible needs both recurrence AND elapsed span", () => {
+    const t0 = Date.now();
+    expect(fixEligible(3, t0, t0 + 11 * 60 * 1000)).toBe(true);
+    // Three in a burst: enough counts, not enough time.
+    expect(fixEligible(3, t0, t0 + 60_000)).toBe(false);
+    // One over a day: enough time, not enough counts.
+    expect(fixEligible(2, t0, t0 + DAY_MS)).toBe(false);
+  });
+
+  it("withholds the fix (fixable=false, no proposedFix) until eligible", () => {
+    const recent = [
+      failedRecord({ errorMessage: "Unknown tool: bash" }),
+      failedRecord({ errorMessage: "Unknown tool: bash" }),
+    ];
+    const [candidate] = buildErrorCandidates(recent, 60, CONFIG);
+    expect(candidate.fixable).toBe(false);
+    expect(candidate.proposedFix).toBeUndefined();
+  });
+
+  it("offers enable-flag when the owning rule is switched off", () => {
+    const [candidate] = buildErrorCandidates(
+      recurring("Unknown tool: mytool"),
+      60,
+      { ...CONFIG, autoBridgeDirectTools: false },
+    );
+    expect(candidate.fixable).toBe(true);
+    expect(candidate.proposedFix).toEqual({
+      kind: "enable-flag",
+      flag: "autoBridgeDirectTools",
+      rule: 2,
+    });
+  });
+
+  it("reports a gate-gap when the owning rule is already on", () => {
+    const [candidate] = buildErrorCandidates(recurring("Unknown tool: mytool"), 60, CONFIG);
+    expect(candidate.proposedFix?.kind).toBe("gate-gap");
+    expect(candidate.proposedFix?.rule).toBe(2);
+  });
+
+  it("proposes refining the rule that attempted and still failed", () => {
+    const base = Date.now() - DAY_MS;
+    const [candidate] = buildErrorCandidates(
+      [
+        failedRecord({ time: base, category: "RANGE_CLAMP", wasHealed: true, errorMessage: "offset 9 out of range v1" }),
+        failedRecord({ time: base + 11 * 60 * 1000, category: "RANGE_CLAMP", wasHealed: true, errorMessage: "offset 9 out of range v1" }),
+        failedRecord({ time: base + 15 * 60 * 1000, category: "RANGE_CLAMP", wasHealed: true, errorMessage: "offset 9 out of range v1" }),
+      ],
+      60,
+      CONFIG,
+    );
+    expect(candidate.fixable).toBe(true);
+    expect(candidate.proposedFix).toMatchObject({ kind: "refine-rule" });
+  });
+
+  it("flags an uncovered pattern as a new-rule candidate to author", () => {
+    const [candidate] = buildErrorCandidates(
+      recurring("totally novel failure mode zzz"),
+      60,
+      CONFIG,
+    );
+    expect(candidate.fixable).toBe(true);
+    expect(candidate.proposedFix).toEqual({ kind: "new-rule" });
+  });
+
+  it("resolves without a config (no flag assertion possible)", () => {
+    const [candidate] = buildErrorCandidates(recurring("Unknown tool: mytool"));
+    expect(candidate.fixable).toBe(true);
+    // No config → cannot prove a toggle is off, so it stays a gate-gap.
+    expect(candidate.proposedFix?.kind).toBe("gate-gap");
   });
 });

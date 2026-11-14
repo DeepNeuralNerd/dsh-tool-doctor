@@ -11,6 +11,7 @@ const CONFIG: DoctorConfig = {
   errorHints: true,
   persistPassthrough: false,
   healResponseTools: true,
+  shadowMode: false,
 };
 
 function makeExec(overrides: Partial<ToolDispatchExecution> = {}): ToolDispatchExecution {
@@ -251,6 +252,54 @@ describe("runPipeline — post-dispatch recovery", () => {
     );
     const text = (outcome.result.content?.[0] as { text?: string })?.text ?? "";
     expect(text).not.toContain("[tool-doctor hint]");
+  });
+});
+
+describe("runPipeline — shadow mode", () => {
+  const SHADOW = { ...CONFIG, shadowMode: true };
+
+  it("claims the repair but dispatches the original arguments", async () => {
+    const original = { command: "ls -la" };
+    const exec = makeExec({ name: "run_code", arguments: { ...original } });
+    const outcome = await runPipeline(exec, async () => textResult("ran"), SHADOW, SESSION);
+    // The measurement claim stands; the host never sees the repair.
+    expect(outcome.wasHealed).toBe(true);
+    expect(exec.arguments).toEqual(original);
+    expect(outcome.changes.join(" ")).toMatch(/shadow mode/i);
+  });
+
+  it("claims READ_ARGS yet leaves the offset untouched", async () => {
+    const exec = makeExec({ name: "read", arguments: { file_path: "/a.txt", offset: 0 } });
+    const outcome = await runPipeline(exec, async () => textResult("body"), SHADOW, SESSION);
+    expect(outcome.wasHealed).toBe(true);
+    expect(outcome.category).toBe("READ_ARGS");
+    expect((exec.arguments as Record<string, unknown>).offset).toBe(0);
+  });
+
+  it("runs no post-dispatch recovery and appends no hint", async () => {
+    const nested: unknown[] = [];
+    const tools = {
+      get: (name: string) => ({ name }),
+      execute: async (input: unknown) => {
+        nested.push(input);
+        return textResult("bridged");
+      },
+    } as never;
+    const exec = makeExec({ name: "bash", arguments: { command: "ls" } });
+    const outcome = await runPipeline(
+      exec,
+      async () => ({
+        isError: true,
+        content: [{ type: "text", text: "Unknown tool: bash (only `run_code` is callable directly)" }],
+      }),
+      SHADOW,
+      SESSION,
+      { tools },
+    );
+    expect(nested.length).toBe(0); // the bridge never fires in shadow mode
+    const text = (outcome.result.content?.[0] as { text?: string })?.text ?? "";
+    expect(text).toBe("Unknown tool: bash (only `run_code` is callable directly)");
+    expect(text).not.toContain("[tool-doctor hint]"); // original error, byte-for-byte
   });
 });
 

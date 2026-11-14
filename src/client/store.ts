@@ -46,6 +46,8 @@ export interface NormalizerStats {
   failuresByTool: Record<string, number>;
   failuresByCategory: Record<string, number>;
   recentRecords: NormalizerRecord[];
+  /** Categories whose retry circuit breaker is currently open (retries paused). */
+  breakerOpen: string[];
 }
 
 /** Effective doctor configuration — the eight boolean rule flags. */
@@ -99,6 +101,7 @@ export function createEmptyStats(): NormalizerStats {
     failuresByTool: {},
     failuresByCategory: {},
     recentRecords: [],
+    breakerOpen: [],
   };
 }
 
@@ -194,6 +197,10 @@ export function coerceStats(raw: unknown): NormalizerStats | null {
     failuresByTool: coerceNumberMap(s.failuresByTool),
     failuresByCategory: coerceNumberMap(s.failuresByCategory),
     recentRecords: records,
+    // Optional on the wire: older servers and persisted snapshots read as none.
+    breakerOpen: Array.isArray(s.breakerOpen)
+      ? s.breakerOpen.filter((v): v is string => typeof v === "string")
+      : [],
   };
 }
 

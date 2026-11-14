@@ -18,6 +18,7 @@ export const pathScopeStage: PreStage = {
   id: "path-scope",
   label: "Workspace path scope (PATH_SCOPE)",
   ruleNumber: 3,
+  enabledBy: "autoClampRanges",
   category: "PATH_SCOPE",
   roundTrips: 1,
   matchesError: (_code, text) =>

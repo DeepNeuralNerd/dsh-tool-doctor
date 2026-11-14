@@ -68,8 +68,13 @@ export class CircuitBreaker {
 
   /** Diagnostic view of open circuits (for the stats feed). */
   openCategories(): string[] {
-    return [...this.failures.entries()]
-      .filter(([category, list]) => this.prune(category).length >= this.threshold)
-      .map(([category]) => category);
+    // prune() is mutating (it deletes below-threshold entries), so test the
+    // post-prune length per key rather than a pre-taken entries snapshot —
+    // otherwise a circuit that just cooled would still be reported as open.
+    const open: string[] = [];
+    for (const category of [...this.failures.keys()]) {
+      if (this.prune(category).length >= this.threshold) open.push(category);
+    }
+    return open;
   }
 }

@@ -39,6 +39,7 @@ export const rangeRetryStage: PostStage = {
   id: "range-retry",
   label: "Range clamp retry (RANGE_CLAMP)",
   ruleNumber: 3,
+  enabledBy: "autoClampRanges",
   category: "RANGE_CLAMP",
   inspect(exec, result, env) {
     if (!env.config.autoClampRanges || !env.tools) return undefined;

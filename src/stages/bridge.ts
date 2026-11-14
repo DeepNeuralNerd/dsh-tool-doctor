@@ -26,6 +26,7 @@ export const bridgeStage: PostStage = {
   id: "bridge",
   label: "Unknown-tool safe recovery (UNKNOWN_TOOL)",
   ruleNumber: 2,
+  enabledBy: "autoBridgeDirectTools",
   category: "UNKNOWN_TOOL",
   roundTrips: 1,
   matchesError: (_code, text) =>

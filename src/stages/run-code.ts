@@ -169,6 +169,7 @@ export const runCodeStage: PreStage = {
   id: "run-code",
   label: "run_code argument & body repair",
   ruleNumber: 1,
+  enabledBy: "autoWrapRunCode",
   roundTrips: 1,
   matchesError: (code) => code === "CODE_RUN_FAILED" || code === "INVALID_ARGS",
   run(toolName, args, env): StageOutcome | undefined {

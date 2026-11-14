@@ -19,6 +19,7 @@ export const pathQuotesStage: PreStage = {
   id: "path-quotes",
   label: "Quoted path unwrap (PATH_QUOTES)",
   ruleNumber: 3,
+  enabledBy: "autoClampRanges",
   category: "PATH_QUOTES",
   roundTrips: 1,
   matchesError: (_code, text) => /not found|cannot read|does not exist/i.test(text ?? ""),

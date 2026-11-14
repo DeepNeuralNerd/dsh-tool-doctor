@@ -1108,6 +1108,91 @@
 
 .defaultPreview summary:hover { color: var(--td-fg); }
 
+/* ---- Fix proposals & observation (errors tab) ---- */
+
+.errorsStatOk { color: var(--td-ok); }
+
+.fixBlock {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--td-accent) 32%, transparent);
+  border-left: 3px solid var(--td-accent);
+  border-radius: var(--td-radius-inner);
+  background: color-mix(in srgb, var(--td-accent) 7%, transparent);
+}
+
+.fixCol {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1 1 260px;
+}
+
+.fixLabel {
+  font-size: 10.5px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--td-accent);
+}
+
+.fixText { font-size: 12px; line-height: 1.6; color: var(--td-muted); }
+
+.fixBtn {
+  flex-shrink: 0;
+  padding: 7px 14px;
+  border: 1px solid var(--td-accent);
+  border-radius: var(--td-radius-control);
+  background: color-mix(in srgb, var(--td-accent) 88%, transparent);
+  color: var(--td-bg);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: filter 120ms ease, opacity 120ms ease;
+}
+
+.fixBtn:hover:not(:disabled) { filter: brightness(1.08); }
+.fixBtn:disabled { opacity: 0.55; cursor: default; }
+
+.watchNote {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--td-radius-inner);
+  background: var(--td-inset);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--td-dim);
+}
+
+/* ---- Rule scoreboard extras (rules tab) ---- */
+
+.openPill {
+  flex-shrink: 0;
+  padding: 1px 8px;
+  border-radius: var(--td-radius-chip);
+  background: color-mix(in srgb, var(--td-err) 12%, transparent);
+  color: var(--td-err);
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: help;
+}
+
+.lastFired { color: var(--td-dim); font-weight: 500; }
+
+/* ---- Record export (live tab) ---- */
+
+.exportGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
 /* ---- Narrow panels & motion ---- */
 
 @media (max-width: 720px) {

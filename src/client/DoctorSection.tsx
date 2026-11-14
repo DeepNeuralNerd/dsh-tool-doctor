@@ -70,6 +70,68 @@ const TEXT_RULE_HINTS: ReadonlyArray<{ rule: number; test: RegExp }> = [
   { rule: 7, test: /<tool_call|<function=|\[TOOL_CALLS\]/i },
 ];
 
+/** Config flag that gates each category's repairs (mirrors CATEGORY_TO_FLAG). */
+const CATEGORY_TO_FLAG: Readonly<Record<string, string>> = {
+  INVALID_ARGS: "autoWrapRunCode", CODE_WRAP: "autoWrapRunCode",
+  RUN_CODE_DESC: "autoWrapRunCode", RUN_CODE_SYNTAX: "autoWrapRunCode",
+  INNER_DESC: "autoWrapRunCode", UNKNOWN_TOOL: "autoBridgeDirectTools",
+  RANGE_CLAMP: "autoClampRanges", PATH_SCOPE: "autoClampRanges",
+  READ_ARGS: "autoClampRanges", PATH_QUOTES: "autoClampRanges",
+  MNEMON_RESULT: "autoClampRanges", FS_OBSERVED: "autoObserveFiles",
+  RESPONSE_TOOL_HEAL: "healResponseTools",
+};
+
+/** Flags carrying each rule's repairs, registry order (mirrors RULE_FLAGS). */
+const RULE_FLAGS: ReadonlyMap<number, readonly string[]> = (() => {
+  const map = new Map<number, string[]>();
+  for (const [category, rule] of Object.entries(CATEGORY_TO_RULE)) {
+    const flag = CATEGORY_TO_FLAG[category];
+    if (flag === undefined) continue;
+    const list = map.get(rule) ?? [];
+    if (!list.includes(flag)) list.push(flag);
+    map.set(rule, list);
+  }
+  return map;
+})();
+
+/** Fix-proposal eligibility (mirrors FIX_PROPOSE_MIN_* on the server). */
+const FIX_PROPOSE_MIN_COUNT = 3;
+const FIX_PROPOSE_MIN_SPAN_MS = 10 * 60 * 1000;
+
+type ProposedFixKind = "enable-flag" | "gate-gap" | "refine-rule" | "new-rule";
+
+interface ProposedFix {
+  kind: ProposedFixKind;
+  flag?: string;
+  rule?: number;
+}
+
+/** Enough recurrences over enough elapsed time to justify offering a fix. */
+function fixEligible(count: number, firstSeen: number, lastSeen: number): boolean {
+  return count >= FIX_PROPOSE_MIN_COUNT && lastSeen - firstSeen >= FIX_PROPOSE_MIN_SPAN_MS;
+}
+
+/** Mirror of proposeFix(): name the toggle that resolves a gap when one is off. */
+function proposeFix(
+  verdict: CandidateVerdict,
+  ruleHint: number | undefined,
+  config: Record<string, boolean> | null | undefined,
+): ProposedFix {
+  if (verdict === "attempted-failed") return { kind: "refine-rule", rule: ruleHint };
+  if (verdict === "possible-existing" && ruleHint !== undefined) {
+    const flags = RULE_FLAGS.get(ruleHint) ?? [];
+    const off = config === null || config === undefined
+      ? undefined
+      : flags.find((f) => config[f] === false);
+    if (off !== undefined) return { kind: "enable-flag", flag: off, rule: ruleHint };
+    return flags[0] !== undefined
+      ? { kind: "gate-gap", rule: ruleHint, flag: flags[0] }
+      : { kind: "gate-gap", rule: ruleHint };
+  }
+  if (verdict === "new-rule-candidate") return { kind: "new-rule" };
+  return ruleHint !== undefined ? { kind: "gate-gap", rule: ruleHint } : { kind: "gate-gap" };
+}
+
 const SIGNATURE_MAX = 180;
 
 /**
@@ -122,6 +184,8 @@ interface ErrorCandidate {
   lastSeen: number;
   verdict: CandidateVerdict;
   ruleHint?: number;
+  fixable: boolean;
+  proposedFix?: ProposedFix;
   categories: string[];
   sample: { errorMessage: string; originalArgsPreview: string };
 }
@@ -145,6 +209,7 @@ interface CandidateGroup {
 function buildErrorCandidates(
   records: readonly NormalizerRecord[],
   limit = 60,
+  config?: Record<string, boolean> | null,
 ): ErrorCandidate[] {
   const groups = new Map<string, CandidateGroup>();
   for (const record of records) {
@@ -188,6 +253,7 @@ function buildErrorCandidates(
       verdict = hinted !== undefined ? "possible-existing" : "new-rule-candidate";
       ruleHint = hinted;
     }
+    const fixable = fixEligible(group.count, group.firstSeen, group.lastSeen);
     candidates.push({
       key: group.key,
       toolName: group.toolName,
@@ -197,6 +263,8 @@ function buildErrorCandidates(
       lastSeen: group.lastSeen,
       verdict,
       ruleHint,
+      fixable,
+      ...(fixable ? { proposedFix: proposeFix(verdict, ruleHint, config) } : {}),
       categories: [...group.categories],
       sample: {
         errorMessage: group.latest.errorMessage ?? "",
@@ -392,7 +460,7 @@ function KpiCard(props: {
   );
 }
 
-/** The eight config flags in rule order, with their locale keys. */
+/** The config flags in rule order, with their locale keys. */
 const RULES: ReadonlyArray<{ flag: string; titleKey: NormalizerKey; descKey: NormalizerKey }> = [
   { flag: "autoWrapRunCode", titleKey: "rule1Title", descKey: "rule1Desc" },
   { flag: "autoBridgeDirectTools", titleKey: "rule2Title", descKey: "rule2Desc" },
@@ -402,7 +470,14 @@ const RULES: ReadonlyArray<{ flag: string; titleKey: NormalizerKey; descKey: Nor
   { flag: "errorHints", titleKey: "rule6Title", descKey: "rule6Desc" },
   { flag: "healResponseTools", titleKey: "rule7Title", descKey: "rule7Desc" },
   { flag: "persistPassthrough", titleKey: "rule8Title", descKey: "rule8Desc" },
+  { flag: "shadowMode", titleKey: "ruleShadowTitle", descKey: "ruleShadowDesc" },
 ];
+
+/** Human name for a config flag, reusing the rule-card titles. */
+function flagLabel(flag: string): { titleKey: NormalizerKey } | undefined {
+  const rule = RULES.find((r) => r.flag === flag);
+  return rule !== undefined ? { titleKey: rule.titleKey } : undefined;
+}
 
 /** Which locale line to show for a store error, by failing surface. */
 const ERROR_LINE: Record<DoctorErrorSource, NormalizerKey> = {
@@ -498,10 +573,21 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
   );
 
   const candidates = useMemo(
-    () => buildErrorCandidates(stats.recentRecords),
-    [stats.recentRecords],
+    () => buildErrorCandidates(stats.recentRecords, 60, state.config),
+    [stats.recentRecords, state.config],
   );
   const newRuleCount = candidates.filter((c) => c.verdict === "new-rule-candidate").length;
+  const fixableCount = candidates.filter((c) => c.fixable).length;
+
+  /** Latest observed record per category, for the rules-tab scoreboard. */
+  const lastFiredByCategory = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const record of stats.recentRecords) {
+      const seen = map.get(record.category);
+      if (seen === undefined || record.time > seen) map.set(record.category, record.time);
+    }
+    return map;
+  }, [stats.recentRecords]);
 
   // ── Handlers ───────────────────────────────────────────────────────────────
 
@@ -570,6 +656,57 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
     });
   };
 
+  /** One-click adoption of an enable-flag proposal (also jumps to Rules). */
+  const onApplyFix = (flag: string): void => {
+    onToggleRule(flag, true);
+  };
+
+  // ── Record export (client-side; the filtered list is already local) ───────
+  const download = (filename: string, mime: string, text: string): void => {
+    const url = URL.createObjectURL(new Blob([text], { type: mime }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 2000);
+  };
+
+  const exportRecords = (kind: "csv" | "json"): void => {
+    if (filteredRecords.length === 0) return;
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    if (kind === "json") {
+      download(
+        `tool-doctor-records-${stamp}.json`,
+        "application/json",
+        JSON.stringify(filteredRecords, null, 2),
+      );
+      return;
+    }
+    const cell = (v: string): string => `"${v.replace(/"/g, '""')}"`;
+    const lines = [
+      "time,tool,category,wasHealed,status,tokensSaved,errorMessage,originalArgs,normalizedArgs,summary",
+    ];
+    for (const r of filteredRecords) {
+      lines.push(
+        [
+          new Date(r.time).toISOString(),
+          cell(r.toolName),
+          cell(r.category),
+          String(r.wasHealed),
+          cell(r.status),
+          r.tokensSaved !== undefined ? String(r.tokensSaved) : "",
+          cell(r.errorMessage ?? ""),
+          cell(r.originalArgsPreview),
+          cell(r.normalizedArgsPreview ?? ""),
+          cell(r.normalizationSummary ?? ""),
+        ].join(","),
+      );
+    }
+    download(`tool-doctor-records-${stamp}.csv`, "text/csv", lines.join("\n"));
+  };
+
   // ── Derived display values ─────────────────────────────────────────────────
 
   const formatTokens = (n: number): string => {
@@ -603,6 +740,39 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
     if (candidate.verdict === "attempted-failed") return t("verdictAttemptedText").replace("{rule}", rule);
     if (candidate.verdict === "possible-existing") return t("verdictGapText").replace("{rule}", rule);
     return t("verdictNewText");
+  };
+
+  const fixSentence = (fix: ProposedFix): string => {
+    const rule = fix.rule !== undefined ? String(fix.rule) : "?";
+    switch (fix.kind) {
+      case "enable-flag":
+        return t("fixEnableFlag").replace("{rule}", rule);
+      case "gate-gap":
+        return t("fixGateGap").replace("{rule}", rule);
+      case "refine-rule":
+        return t("fixRefineRule").replace("{rule}", rule);
+      default:
+        return t("fixNewRule");
+    }
+  };
+
+  const fixActionLabel = (fix: ProposedFix): string => {
+    const named = fix.flag !== undefined ? flagLabel(fix.flag) : undefined;
+    const name = named !== undefined ? t(named.titleKey) : "?";
+    return t("fixApplyButton").replace("{rule}", name);
+  };
+
+  /** Why a pattern is still under observation, phrased by whichever bar is higher. */
+  const watchSentence = (candidate: ErrorCandidate): string => {
+    const needCount = Math.max(0, FIX_PROPOSE_MIN_COUNT - candidate.count);
+    if (needCount > 0) {
+      return t("watchNeedMore").replace("{n}", String(needCount));
+    }
+    const remainMin = Math.max(
+      1,
+      Math.ceil((FIX_PROPOSE_MIN_SPAN_MS - (candidate.lastSeen - candidate.firstSeen)) / 60000),
+    );
+    return t("watchNeedTime").replace("{m}", String(remainMin));
   };
 
   const rowToneClass = (record: NormalizerRecord): string => {
@@ -762,6 +932,24 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
                     </button>
                   ))}
                 </div>
+                <div className={styles.exportGroup}>
+                  <button
+                    type="button"
+                    className={styles.btnGhost}
+                    disabled={filteredRecords.length === 0}
+                    onClick={() => exportRecords("csv")}
+                  >
+                    {t("exportCsv")}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.btnGhost}
+                    disabled={filteredRecords.length === 0}
+                    onClick={() => exportRecords("json")}
+                  >
+                    {t("exportJson")}
+                  </button>
+                </div>
               </div>
 
               {filteredRecords.length === 0 ? (
@@ -870,6 +1058,12 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
               </span>
               <span className={styles.errorsStatLabel}>{t("errorsNewTitle")}</span>
             </div>
+            <div className={styles.errorsStat}>
+              <span className={`${styles.errorsStatValue} ${fixableCount > 0 ? styles.errorsStatOk : ""}`}>
+                {fixableCount}
+              </span>
+              <span className={styles.errorsStatLabel}>{t("errorsFixableTitle")}</span>
+            </div>
           </div>
 
           {candidates.length === 0 ? (
@@ -911,6 +1105,29 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
                     {open && (
                       <div className={styles.candBody}>
                         <p className={styles.candVerdict}>{verdictSentence(candidate)}</p>
+                        {candidate.fixable && candidate.proposedFix !== undefined ? (
+                          <div className={styles.fixBlock}>
+                            <div className={styles.fixCol}>
+                              <span className={styles.fixLabel}>{t("proposedFixLabel")}</span>
+                              <span className={styles.fixText}>{fixSentence(candidate.proposedFix)}</span>
+                            </div>
+                            {candidate.proposedFix.kind === "enable-flag" && candidate.proposedFix.flag !== undefined && (
+                              <button
+                                type="button"
+                                className={styles.fixBtn}
+                                disabled={pendingToggle !== null}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onApplyFix(candidate.proposedFix!.flag!);
+                                }}
+                              >
+                                {pendingToggle === candidate.proposedFix.flag ? "…" : fixActionLabel(candidate.proposedFix)}
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <p className={styles.watchNote}>{watchSentence(candidate)}</p>
+                        )}
                         <div className={styles.candMeta}>
                           <span>{t("firstSeen")}: {new Date(candidate.firstSeen).toLocaleString()}</span>
                           <span>{t("lastSeen")}: {new Date(candidate.lastSeen).toLocaleString()}</span>
@@ -999,10 +1216,18 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
                 return (
                   <li key={category} className={`${styles.catRow} ${total === 0 ? styles.catRowMuted : ""}`}>
                     <span className={styles.catName}>{CATEGORY_LABELS[category]}</span>
+                    {stats.breakerOpen.includes(category) && (
+                      <span className={styles.openPill} title={t("breakerOpenHint")}>{t("breakerOpen")}</span>
+                    )}
                     <span className={styles.catCounts}>
                       {total} {t("ruleHealthTotal")}
                       {failed > 0 && (
                         <span className={styles.catFailed}> · {failed} {t("ruleHealthFailed")}</span>
+                      )}
+                      {lastFiredByCategory.has(category) && (
+                        <span className={styles.lastFired}>
+                          {" · "}{t("lastFiredPrefix")} {new Date(lastFiredByCategory.get(category)!).toLocaleTimeString()}
+                        </span>
                       )}
                     </span>
                   </li>

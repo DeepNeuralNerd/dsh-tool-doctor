@@ -26,6 +26,7 @@ export const TOGGLE_KEYS: ReadonlyArray<keyof DoctorConfig> = [
   "errorHints",
   "persistPassthrough",
   "healResponseTools",
+  "shadowMode",
 ];
 
 /** Overrides file lives beside the event log, under the DSH home directory. */

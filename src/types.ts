@@ -114,6 +114,12 @@ export interface DoctorConfig {
   persistPassthrough: boolean;
   /** Promote tool-call markup found in streamed text into structured tool blocks. */
   healResponseTools: boolean;
+  /**
+   * Shadow mode: evaluate every pre-dispatch repair and record what it WOULD
+   * fix, but dispatch the original arguments and run no post-dispatch retries
+   * or hints — measure a rule's coverage without changing behavior.
+   */
+  shadowMode: boolean;
 }
 
 /** Default configuration: every repair and diagnostic on, quiet pass-through off. */
@@ -126,6 +132,7 @@ export const DEFAULT_CONFIG: DoctorConfig = {
   errorHints: true,
   persistPassthrough: false,
   healResponseTools: true,
+  shadowMode: false,
 };
 
 /** The flags a dashboard toggle patch may flip (all of them). */

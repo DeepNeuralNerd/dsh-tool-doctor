@@ -137,6 +137,9 @@ export const en = {
   rule8Title: "Passthrough trace persistence",
   rule8Desc:
     "Also persists successful untouched calls in the detailed JSONL trace; aggregate counters are unaffected either way.",
+  ruleShadowTitle: "Shadow mode (measure only)",
+  ruleShadowDesc:
+    "Evaluates every pre-dispatch repair and records what the rules WOULD fix, but dispatches the original arguments and runs no retries or hints — measure a rule's coverage before trusting it to act.",
   statusActive: "On",
   statusInactive: "Off",
   ruleTagActiveHint: "On — click to turn this rule off",
@@ -145,6 +148,29 @@ export const en = {
   ruleHealthTitle: "Rule health by category",
   ruleHealthTotal: "events",
   ruleHealthFailed: "failed",
+  lastFiredPrefix: "last",
+  breakerOpen: "retries paused",
+  breakerOpenHint:
+    "This category failed its recoveries too often inside the window; retries stay paused until the circuit closes.",
+
+  // Error-candidate fix proposals
+  proposedFixLabel: "Proposed fix",
+  fixEnableFlag:
+    "Healing rule {rule} owns this error class and is currently OFF — turning it on should absorb this pattern.",
+  fixGateGap:
+    "Healing rule {rule} is ON but its gate skipped this variant — inspect the sample; likely a gate case the rule does not cover yet.",
+  fixRefineRule:
+    "Healing rule {rule} attempted this and the call still failed — the sample shows a variant the repair does not cover.",
+  fixNewRule:
+    "No healing rule covers this pattern yet — keep collecting samples, then author a stage for it.",
+  fixApplyButton: "Turn on {rule}",
+  watchNeedMore:
+    "Under observation — {n} more failures of this exact pattern, spread over 10+ minutes, unlock a fix proposal.",
+  watchNeedTime:
+    "Under observation — this pattern needs about {m} more minutes of recurrence before a fix is offered.",
+  errorsFixableTitle: "fixes offered",
+  exportCsv: "Export CSV",
+  exportJson: "Export JSON",
 
   // Guidance editor
   guidanceTitle: "Model prompt guidance",

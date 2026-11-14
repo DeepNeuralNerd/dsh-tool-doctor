@@ -213,6 +213,17 @@ export async function runPipeline(
     }
   }
 
+  // Shadow mode: repairs are evaluated and recorded exactly as they would
+  // apply, but the ORIGINAL arguments go to the host and nothing post-dispatch
+  // runs — a measurement-only deployment of the rule set (coverage without
+  // behavior change). The claim still records, so the panel shows what the
+  // rules would have healed; the token meter overstates by design.
+  if (config.shadowMode && wasHealed) {
+    exec.arguments = originalArgs;
+    normalizedPreview = undefined;
+    changes.push("Shadow mode: repair evaluated, original arguments dispatched");
+  }
+
   const getOriginalPreview = (needed: boolean): string =>
     needed ? compactPreview(getRawArgsStr()) : "";
 
@@ -224,7 +235,7 @@ export async function runPipeline(
     // failing its recoveries stops being retried for the window, so one bad
     // file cannot burn round-trips forever. Success closes immediately.
     let settledEarly = false;
-    for (const stage of POST_STAGES) {
+    for (const stage of config.shadowMode ? [] : POST_STAGES) {
       const breakerKey = stage.category ?? stage.id;
       if (services.breaker !== undefined && !services.breaker.allow(breakerKey)) {
         continue; // open circuit: skip this category's recovery for the window
@@ -286,8 +297,9 @@ export async function runPipeline(
 
       // Unrecoverable errors still benefit from one appended hint: the model
       // receives actionable guidance in the same round-trip instead of failing
-      // blindly again. The original error text is always preserved.
-      if (config.errorHints && result.isError === true) {
+      // blindly again. The original error text is always preserved. (Shadow
+      // mode changes nothing the model sees, hints included.)
+      if (config.errorHints && !config.shadowMode && result.isError === true) {
         const failureText = resultErrorText(result) ?? "";
         if (
           resultHasCode(result, "UNKNOWN_TOOL") &&

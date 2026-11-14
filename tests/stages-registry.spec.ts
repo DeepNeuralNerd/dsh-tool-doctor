@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { CATEGORY_LABELS, CATEGORY_META, POST_STAGES, PRE_STAGES, STAGES } from "../src/stages/index.ts";
+import { CATEGORY_LABELS, CATEGORY_META, CATEGORY_TO_FLAG, POST_STAGES, PRE_STAGES, STAGES } from "../src/stages/index.ts";
+import { TOGGLE_KEYS } from "../src/support/config-overrides.ts";
 import type { HealCategory } from "../src/types.ts";
 
 describe("stage registry", () => {
@@ -84,5 +85,23 @@ describe("stage registry", () => {
         expect(CATEGORY_META[stage.category]).toBeDefined();
       }
     }
+  });
+
+  it("every stage names a real config flag as its gate", () => {
+    for (const stage of STAGES) {
+      expect(stage.enabledBy, `stage ${stage.id}`).toBeTruthy();
+      expect(TOGGLE_KEYS).toContain(stage.enabledBy);
+    }
+  });
+
+  it("CATEGORY_TO_FLAG covers every rule-owning category", () => {
+    for (const [category, meta] of Object.entries(CATEGORY_META)) {
+      if (meta.ruleNumber !== undefined) {
+        expect(CATEGORY_TO_FLAG[category as HealCategory], category).toBeTruthy();
+      }
+    }
+    // Spot-check the family mapping the fix proposals rely on.
+    expect(CATEGORY_TO_FLAG["READ_ARGS"]).toBe("autoClampRanges");
+    expect(CATEGORY_TO_FLAG["UNKNOWN_TOOL"]).toBe("autoBridgeDirectTools");
   });
 });
