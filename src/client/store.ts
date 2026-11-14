@@ -13,6 +13,8 @@
 
 // ── Server contract mirrors (the client bundle stays self-contained) ────────
 
+import type { CandidateVerdict, ProposedFix } from "./mirror.ts";
+
 /** One recorded tool-healing event, as served by GET /stats. */
 export interface NormalizerRecord {
   id: string;
@@ -27,6 +29,8 @@ export interface NormalizerRecord {
   status: "success" | "failed" | "passthrough" | "promoted";
   errorMessage?: string;
   tokensSaved?: number;
+  /** Shadow-mode would-repair match (original args dispatched; not a heal). */
+  shadow?: boolean;
 }
 
 /** Aggregated statistics across all recorded tool executions. */
@@ -38,6 +42,8 @@ export interface NormalizerStats {
   promoted: number;
   passThrough: number;
   passThroughFailed: number;
+  /** Shadow-mode would-repair matches — never counted as heals or savings. */
+  shadowMatches: number;
   estimatedTokensSaved: number;
   /** 0–100, one decimal. */
   healingSuccessRate: number;
@@ -53,10 +59,78 @@ export interface NormalizerStats {
 /** Effective doctor configuration — the eight boolean rule flags. */
 export type DoctorConfigFlags = Readonly<Record<string, boolean>>;
 
+/**
+ * One recurring error pattern from GET /candidates — grouped SERVER-side
+ * from the tracker's durable signature aggregates, so counts span the whole
+ * history, not just the record ring the stats snapshot carries.
+ */
+export interface DoctorCandidate {
+  key: string;
+  toolName: string;
+  signature: string;
+  count: number;
+  firstSeen: number;
+  lastSeen: number;
+  verdict: CandidateVerdict;
+  ruleHint?: number;
+  fixable: boolean;
+  proposedFix?: ProposedFix;
+  categories: string[];
+  sample: { errorMessage: string; originalArgsPreview: string };
+}
+
+const VERDICTS = new Set<CandidateVerdict>([
+  "attempted-failed",
+  "possible-existing",
+  "new-rule-candidate",
+]);
+
+/** Structural validation for one candidate payload entry. */
+function coerceCandidate(raw: unknown): DoctorCandidate | null {
+  if (raw === null || typeof raw !== "object") return null;
+  const c = raw as Partial<DoctorCandidate> & { sample?: unknown };
+  if (
+    typeof c.key !== "string" ||
+    typeof c.toolName !== "string" ||
+    typeof c.signature !== "string" ||
+    !VERDICTS.has(c.verdict as CandidateVerdict) ||
+    typeof c.fixable !== "boolean"
+  ) {
+    return null;
+  }
+  const sample =
+    c.sample !== null && typeof c.sample === "object"
+      ? (c.sample as { errorMessage?: unknown; originalArgsPreview?: unknown })
+      : {};
+  return {
+    key: c.key,
+    toolName: c.toolName,
+    signature: c.signature,
+    count: coerceNumber(c.count),
+    firstSeen: coerceNumber(c.firstSeen),
+    lastSeen: coerceNumber(c.lastSeen),
+    verdict: c.verdict as CandidateVerdict,
+    ruleHint: typeof c.ruleHint === "number" ? c.ruleHint : undefined,
+    fixable: c.fixable,
+    proposedFix:
+      c.proposedFix !== undefined && c.proposedFix !== null && typeof c.proposedFix === "object"
+        ? c.proposedFix
+        : undefined,
+    categories: Array.isArray(c.categories)
+      ? c.categories.filter((v): v is string => typeof v === "string")
+      : [],
+    sample: {
+      errorMessage: typeof sample.errorMessage === "string" ? sample.errorMessage : "",
+      originalArgsPreview:
+        typeof sample.originalArgsPreview === "string" ? sample.originalArgsPreview : "",
+    },
+  };
+}
+
 // ── Store state ──────────────────────────────────────────────────────────────
 
 export type DoctorTab = "live" | "analytics" | "errors" | "rules";
-export type StatusFilter = "all" | "healed" | "failed";
+export type StatusFilter = "all" | "healed" | "failed" | "promoted";
 
 /** Which API surface the last non-blocking error came from. */
 export type DoctorErrorSource = "stats" | "reset" | "config" | "guidance";
@@ -75,6 +149,12 @@ export interface DoctorState {
   statusFilter: StatusFilter;
   /** Effective rule toggles mirrored from the host; `null` until it answers. */
   config: DoctorConfigFlags | null;
+  /**
+   * Recurring-error candidates from GET /candidates (durable server-side
+   * counts); `null` until the endpoint answers — the UI then falls back to
+   * grouping the record window locally.
+   */
+  candidates: DoctorCandidate[] | null;
   polling: boolean;
   guidance: GuidanceState;
   guidanceLoading: boolean;
@@ -94,6 +174,7 @@ export function createEmptyStats(): NormalizerStats {
     promoted: 0,
     passThrough: 0,
     passThroughFailed: 0,
+    shadowMatches: 0,
     estimatedTokensSaved: 0,
     healingSuccessRate: 0,
     byTool: {},
@@ -179,6 +260,7 @@ export function coerceStats(raw: unknown): NormalizerStats | null {
         typeof entry.errorMessage === "string" ? entry.errorMessage : undefined,
       tokensSaved:
         typeof entry.tokensSaved === "number" ? entry.tokensSaved : undefined,
+      shadow: entry.shadow === true ? true : undefined,
     });
   }
 
@@ -190,6 +272,8 @@ export function coerceStats(raw: unknown): NormalizerStats | null {
     promoted: coerceNumber(s.promoted),
     passThrough: coerceNumber(s.passThrough),
     passThroughFailed: coerceNumber(s.passThroughFailed),
+    // Optional on the wire: payloads from an older server load as 0.
+    shadowMatches: coerceNumber(s.shadowMatches),
     estimatedTokensSaved: coerceNumber(s.estimatedTokensSaved),
     healingSuccessRate: Math.min(100, Math.max(0, coerceNumber(s.healingSuccessRate))),
     byTool: coerceNumberMap(s.byTool),
@@ -261,6 +345,11 @@ export class DoctorStore {
 
   private pollTimer: number | null = null;
 
+  /** Single-flight guard: at most one refresh in flight, ever. */
+  private pollInFlight = false;
+
+  private visibilityHandler: (() => void) | null = null;
+
   constructor() {
     this.current = {
       status: "idle",
@@ -269,6 +358,7 @@ export class DoctorStore {
       searchQuery: "",
       statusFilter: "all",
       config: null,
+      candidates: null,
       polling: false,
       guidance: { text: null, defaultText: null },
       guidanceLoading: false,
@@ -306,7 +396,7 @@ export class DoctorStore {
     if (filter !== this.current.statusFilter) this.patch({ statusFilter: filter });
   }
 
-  /** Toggle the optional 5-second stats polling loop. */
+  /** Toggle the optional 5-second refresh loop (stats + candidates). */
   public setPolling(on: boolean): void {
     if (on === this.current.polling) return;
     this.patch({ polling: on });
@@ -314,12 +404,38 @@ export class DoctorStore {
       window.clearInterval(this.pollTimer);
       this.pollTimer = null;
     }
+    if (this.visibilityHandler !== null && typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", this.visibilityHandler);
+      this.visibilityHandler = null;
+    }
     if (on && typeof window !== "undefined") {
-      this.pollTimer = window.setInterval(() => {
-        void this.loadStats();
-      }, POLL_INTERVAL_MS);
+      this.pollTimer = window.setInterval(this.pollTick, POLL_INTERVAL_MS);
+      if (typeof document !== "undefined") {
+        // Coming back into view refreshes immediately instead of waiting out
+        // the interval that kept running (and skipping) while hidden.
+        this.visibilityHandler = (): void => {
+          if (document.visibilityState === "visible") this.pollTick();
+        };
+        document.addEventListener("visibilitychange", this.visibilityHandler);
+      }
     }
   }
+
+  /**
+   * One poll refresh: single-flight, so a slow response can never pile up
+   * behind its own interval nor have an older reply overwrite a newer one;
+   * paused while the panel is hidden, which is traffic nobody sees.
+   */
+  private pollTick = (): void => {
+    if (this.pollInFlight) return;
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+      return;
+    }
+    this.pollInFlight = true;
+    Promise.allSettled([this.loadStats(), this.loadCandidates()]).finally(() => {
+      this.pollInFlight = false;
+    });
+  };
 
   // ── Stats ─────────────────────────────────────────────────────────────────
 
@@ -338,6 +454,30 @@ export class DoctorStore {
     }
   };
 
+  /**
+   * Pull the server-grouped recurring-error candidates. Auxiliary view: a
+   * failure keeps the previous set (or the local window grouping) without an
+   * error banner, so a transient 500 never covers the panel in red.
+   */
+  public loadCandidates = async (): Promise<void> => {
+    if (typeof fetch !== "function") return;
+    try {
+      const res = await apiFetch("/candidates");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = (await res.json()) as { candidates?: unknown };
+      if (!Array.isArray(data.candidates)) throw new Error("malformed payload");
+      const candidates: DoctorCandidate[] = [];
+      for (const entry of data.candidates) {
+        const candidate = coerceCandidate(entry);
+        if (candidate !== null) candidates.push(candidate);
+      }
+      this.patch({ candidates });
+    } catch {
+      // Keep the previous view; the endpoint may also be absent on an old
+      // server, which is exactly the case the local fallback grouping serves.
+    }
+  };
+
   /** Clear the tracker and durable log on the host; then zero the local view. */
   public reset = async (): Promise<void> => {
     if (typeof fetch === "function") {
@@ -350,7 +490,13 @@ export class DoctorStore {
       }
     }
     const cleared = createEmptyStats();
-    this.patch({ stats: cleared, searchQuery: "", statusFilter: "all", error: null });
+    this.patch({
+      stats: cleared,
+      searchQuery: "",
+      statusFilter: "all",
+      candidates: null,
+      error: null,
+    });
     persist(cleared);
   };
 

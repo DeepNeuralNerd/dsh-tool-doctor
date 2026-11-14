@@ -276,6 +276,7 @@ describe("runPipeline — shadow mode", () => {
     const outcome = await runPipeline(exec, async () => textResult("ran"), SHADOW, SESSION);
     // The measurement claim stands; the host never sees the repair.
     expect(outcome.wasHealed).toBe(true);
+    expect(outcome.shadow).toBe(true); // the tracker must count a match, not a heal
     expect(exec.arguments).toEqual(original);
     expect(outcome.changes.join(" ")).toMatch(/shadow mode/i);
   });

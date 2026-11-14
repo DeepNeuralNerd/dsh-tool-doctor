@@ -198,6 +198,10 @@ function StatusPill(props: { record: NormalizerRecord; t: TFn }): ReactElement {
   if (record.status === "failed") {
     return <span className={`${styles.statusPill} ${styles.statusPillFail}`}>{t("statusFailed")}</span>;
   }
+  if (record.status === "promoted") {
+    // Its own honest state: markup became a tool call, execution is ahead.
+    return <span className={`${styles.statusPill} ${styles.statusPillPromoted}`}>{t("statusPromoted")}</span>;
+  }
   if (record.wasHealed) {
     return <span className={`${styles.statusPill} ${styles.statusPillOk}`}>{t("statusHealed")}</span>;
   }
@@ -353,6 +357,7 @@ function idleState(): DoctorState {
     searchQuery: "",
     statusFilter: "all",
     config: null,
+    candidates: null,
     polling: false,
     guidance: { text: null, defaultText: null },
     guidanceLoading: false,
@@ -388,6 +393,7 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
     if (!controller) return;
     const unsubscribe = controller.subscribe(() => setState(controller.getSnapshot()));
     void controller.loadStats();
+    void controller.loadCandidates();
     void controller.getConfig();
     void controller.getGuidance();
     return () => {
@@ -413,6 +419,7 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
       stats.recentRecords.filter((record) => {
         if (state.statusFilter === "healed" && !(record.wasHealed && record.status === "success")) return false;
         if (state.statusFilter === "failed" && record.status !== "failed") return false;
+        if (state.statusFilter === "promoted" && record.status !== "promoted") return false;
         const q = state.searchQuery.trim().toLowerCase();
         if (!q) return true;
         return [
@@ -426,10 +433,14 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
     [stats.recentRecords, state.statusFilter, state.searchQuery],
   );
 
-  const candidates = useMemo(
+  // Server-grouped candidates (durable signature aggregates) when available;
+  // the local ring grouping only covers the window, so it is the fallback for
+  // an old server or the pre-first-poll interval.
+  const localCandidates = useMemo(
     () => buildErrorCandidates(stats.recentRecords, 60, state.config),
     [stats.recentRecords, state.config],
   );
+  const candidates = state.candidates ?? localCandidates;
   const newRuleCount = candidates.filter((c) => c.verdict === "new-rule-candidate").length;
   const fixableCount = candidates.filter((c) => c.fixable).length;
 
@@ -654,6 +665,7 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
             className={styles.btnGhost}
             onClick={() => {
               void controller?.loadStats();
+              void controller?.loadCandidates();
               void controller?.getConfig();
             }}
           >
@@ -705,6 +717,14 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
           toneClass={styles.kpiValueSuccess}
           desc={stats.healedFailed > 0 ? `${stats.healedFailed} ${t("kpiHealedFailedSuffix")}` : t("kpiRateDesc")}
         />
+        {(stats.shadowMatches > 0 || state.config?.["shadowMode"] === true) && (
+          <KpiCard
+            title={t("kpiShadow")}
+            value={stats.shadowMatches}
+            toneClass={styles.kpiValueAccent}
+            desc={t("kpiShadowDesc")}
+          />
+        )}
         <KpiCard
           title={t("kpiPromoted")}
           value={stats.promoted}
@@ -720,8 +740,8 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
         />
         <KpiCard
           title={t("kpiUnrecovered")}
-          value={stats.passThroughFailed}
-          toneClass={stats.passThroughFailed > 0 ? styles.kpiValueDanger : undefined}
+          value={unrecoveredTotal}
+          toneClass={unrecoveredTotal > 0 ? styles.kpiValueDanger : undefined}
           desc={t("kpiUnrecoveredDesc")}
         />
       </section>
@@ -773,6 +793,7 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
                       ["all", t("filterAll"), stats.recentRecords.length],
                       ["healed", t("filterHealed"), stats.recentRecords.filter((r) => r.wasHealed && r.status === "success").length],
                       ["failed", t("filterFailed"), stats.recentRecords.filter((r) => r.status === "failed").length],
+                      ["promoted", t("filterPromoted"), stats.recentRecords.filter((r) => r.status === "promoted").length],
                     ] as const
                   ).map(([key, label, count]) => (
                     <button

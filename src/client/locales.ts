@@ -45,17 +45,22 @@ export const en = {
   estimateBadge: "Estimate",
   kpiUnrecovered: "Unrecovered errors",
   kpiUnrecoveredDesc:
-    "Failed calls that reached the host without a repair attempt.",
+    "Failed calls the doctor could not resolve — both after a failed repair and without one. Matches the Errors tab.",
+  kpiShadow: "Would repair (shadow)",
+  kpiShadowDesc:
+    "Shadow mode matched these rules but dispatched the original arguments — measured coverage, not applied repairs.",
 
   // Status labels
   statusHealed: "Healed",
   statusFailed: "Failed",
   statusPassthrough: "Passed through",
+  statusPromoted: "Promoted",
 
   // Live table & filters
   filterAll: "All events",
   filterHealed: "Healed only",
   filterFailed: "Failed only",
+  filterPromoted: "Promoted only",
   searchPlaceholder: "Search tool, category, or args…",
   colTime: "Time",
   colTool: "Tool",

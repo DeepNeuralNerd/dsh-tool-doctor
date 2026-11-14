@@ -21,7 +21,7 @@ import {
 import { dispatchStatus, errorText, resultErrorText } from "./core/result.ts";
 import { objectValue, sessionCwd } from "./core/util.ts";
 import { CATEGORY_META } from "./stages/index.ts";
-import { buildErrorCandidates } from "./support/error-signatures.ts";
+import { candidatesFromAggregates } from "./support/error-signatures.ts";
 import {
   loadOverrides,
   saveOverrides,
@@ -195,6 +195,8 @@ interface PendingHeal {
   originalArgsPreview: string;
   normalizedArgsPreview?: string;
   normalizationSummary?: string;
+  /** Shadow-mode would-repair match; see NormalizerRecord.shadow. */
+  shadow?: boolean;
 }
 
 interface StashedOutcome {
@@ -512,11 +514,12 @@ export function apply(ctxRaw: unknown, userConfig: Partial<DoctorConfig> = {}): 
         kind: "exact",
         path: "/plugin-api/tool-doctor/candidates",
         handler: (_req, res) => {
-          // Same grouping the client applies to the stats snapshot, resolved
-          // against the live config so coverage gaps name the exact toggle.
+          // The tracker's durable per-signature aggregates — every failure
+          // ever counted, not just the dashboard ring — resolved against the
+          // live config so coverage gaps name the exact toggle.
           json(res, 200, {
-            candidates: buildErrorCandidates(
-              tracker.getSnapshot().recentRecords,
+            candidates: candidatesFromAggregates(
+              tracker.getSignatureAggregates(),
               60,
               config,
             ),
@@ -570,6 +573,7 @@ export function apply(ctxRaw: unknown, userConfig: Partial<DoctorConfig> = {}): 
         normalizedArgsPreview: outcome.normalizedArgsPreview,
         normalizationSummary:
           outcome.changes.length > 0 ? outcome.changes.join("; ") : undefined,
+        ...(outcome.shadow ? { shadow: true } : {}),
       });
 
       let outcome: PipelineOutcome;

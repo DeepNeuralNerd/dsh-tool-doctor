@@ -2,6 +2,25 @@
 
 ## Unreleased (2026-11-14)
 
+- **Unambiguous numbers: five dashboard-metric corrections (reviewer
+  priorities 1–5).** (1) Promoted calls get their own status pill and filter
+  chip — the live log no longer labels them "Passed through". (2) Shadow
+  mode is honest: a would-repair match counts in a new `shadowMatches`
+  total and the untouched call lands in pass-through buckets — never in
+  healed success/failure, token savings, or the healing rate; the Overview
+  shows a "Would repair (shadow)" card when shadow is on, and the counter
+  persists and replays with the same identity rules. (3) The "Unrecovered
+  errors" KPI now reads `healedFailed + passThroughFailed` — the same
+  total the Errors tab shows. (4) Recurring-error counts survive history
+  scrolling: the tracker maintains per-signature aggregates fed by EVERY
+  failure (bounded 200-pattern map, least-recently-seen eviction), rebuilt
+  from the full JSONL replay on restore; `/candidates` serves from them,
+  the client prefers them over its window-bound local grouping, and both
+  paths judge through one shared `candidatesFromAggregates` (deep-equal
+  pinned). (5) Polling is single-flight — a slow response never piles up
+  or overwrites newer data — and pauses while the panel is hidden, with an
+  immediate refresh on return to view.
+
 - **Reviewer round (4th): home containment resolves the cwd string first.**
   Containment ran on the RAW cwd, so `C:\Users\Srini\project\..\..\elsewhere`
   — which resolves OUTSIDE the home — still passed and expanded `~`. The

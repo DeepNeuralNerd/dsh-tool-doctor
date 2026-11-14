@@ -64,6 +64,12 @@ export interface PipelineOutcome {
   readonly normalizedArgsPreview?: string;
   /** Semicolon-joined change labels for the record's normalization summary. */
   readonly changes: string[];
+  /**
+   * True when shadow mode evaluated a repair but dispatched the ORIGINAL
+   * arguments. The record carries it so the tracker counts a would-repair
+   * match, never a heal or a token saving.
+   */
+  readonly shadow: boolean;
 }
 
 /** Adapter-provided services the engine may use (all optional). */
@@ -182,6 +188,7 @@ export async function runPipeline(
       category: "PASSTHROUGH",
       originalArgsPreview: "",
       changes: [],
+      shadow: false,
     };
   }
 
@@ -224,11 +231,13 @@ export async function runPipeline(
   // Shadow mode: repairs are evaluated and recorded exactly as they would
   // apply, but the ORIGINAL arguments go to the host and nothing post-dispatch
   // runs — a measurement-only deployment of the rule set (coverage without
-  // behavior change). The claim still records, so the panel shows what the
-  // rules would have healed; the token meter overstates by design.
+  // behavior change). The claim records as a would-repair match (record.shadow
+  // below); the execution outcome belongs to the untouched call.
+  let shadowMatch = false;
   if (config.shadowMode && wasHealed) {
     exec.arguments = originalArgs;
     normalizedPreview = undefined;
+    shadowMatch = true;
     changes.push("Shadow mode: repair evaluated, original arguments dispatched");
   }
 
@@ -350,6 +359,7 @@ export async function runPipeline(
       ),
       normalizedArgsPreview: normalizedPreview,
       changes,
+      shadow: shadowMatch,
     };
   } catch (error: unknown) {
     // Normalize the thrown value to a host error shape for inspection.
@@ -385,6 +395,9 @@ export async function runPipeline(
               originalArgsPreview: getOriginalPreview(true),
               normalizedArgsPreview: `Nested dispatch: ${exec.name}`,
               changes: [recovered.changeLabel],
+              // A real repair ran here (nested dispatch executed), even in
+              // shadow mode: the honest bucket is a heal, not a match.
+              shadow: false,
             };
           }
         }
@@ -399,6 +412,7 @@ export async function runPipeline(
       originalArgsPreview: getOriginalPreview(true),
       normalizedArgsPreview: normalizedPreview,
       changes: [...changes, `Dispatch threw: ${errorText(error) ?? String(error)}`],
+      shadow: shadowMatch,
     });
   }
 }

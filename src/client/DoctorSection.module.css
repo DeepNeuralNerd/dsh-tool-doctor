@@ -484,6 +484,11 @@
   color: var(--td-muted);
 }
 
+.statusPillPromoted {
+  background: color-mix(in srgb, var(--td-accent) 13%, transparent);
+  color: var(--td-accent);
+}
+
 .timeText { white-space: nowrap; color: var(--td-dim); font-size: 11.5px; }
 
 .expandBtn {

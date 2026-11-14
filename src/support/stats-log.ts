@@ -74,6 +74,11 @@ interface PersistedAggregate {
    * summaries written before the counter existed still load and start at 0.
    */
   promoted?: number;
+  /**
+   * Shadow-mode would-repair matches (see NormalizerStats.shadowMatches).
+   * Optional: summaries written before the counter existed still load.
+   */
+  shadowMatches?: number;
 }
 
 const CATEGORIES = new Set<HealCategory>(HEAL_CATEGORIES);
@@ -137,6 +142,8 @@ function validRecord(value: unknown): value is NormalizerRecord {
     return false;
   if (value.tokensSaved !== undefined && !nonNegativeCount(value.tokensSaved))
     return false;
+  if (value.shadow !== undefined && typeof value.shadow !== "boolean")
+    return false;
   return true;
 }
 
@@ -162,6 +169,7 @@ function validAggregate(value: unknown): value is PersistedAggregate {
     nonNegativeCount(value.passThrough) &&
     nonNegativeCount(value.passThroughFailed) &&
     nonNegativeCount(value.estimatedTokensSaved) &&
+    (value.shadowMatches === undefined || nonNegativeCount(value.shadowMatches)) &&
     isRecordObject(value.byTool) &&
     isRecordObject(value.byCategory)
   );
@@ -176,6 +184,7 @@ function accumulateRecord(
     | "promoted"
     | "passThrough"
     | "passThroughFailed"
+    | "shadowMatches"
   >,
   byTool: Record<string, number>,
   byCategory: Record<string, number>,
@@ -185,8 +194,14 @@ function accumulateRecord(
 ): void {
   totals.totalIntercepted++;
   // Promotion is its own bucket (no execution outcome exists yet), mirroring
-  // the tracker's counting so replay and live counters agree.
+  // the tracker's counting so replay and live counters agree. Shadow matches
+  // follow the same identity rule: would-repair + the untouched call's outcome.
   if (record.status === "promoted") totals.promoted = (totals.promoted ?? 0) + 1;
+  else if (record.shadow === true) {
+    totals.shadowMatches = (totals.shadowMatches ?? 0) + 1;
+    if (record.status === "failed") totals.passThroughFailed++;
+    else totals.passThrough++;
+  }
   else if (record.status === "success" && record.wasHealed) totals.healedSuccess++;
   else if (record.status === "failed" && record.wasHealed)
     totals.healedFailed++;
@@ -235,6 +250,7 @@ function aggregateFromRecords(
     promoted: 0,
     passThrough: 0,
     passThroughFailed: 0,
+    shadowMatches: 0,
   };
   const byTool: Record<string, number> = Object.create(null) as Record<
     string,
@@ -253,7 +269,10 @@ function aggregateFromRecords(
   let estimatedTokensSaved = 0;
   for (const record of records) {
     accumulateRecord(totals, byTool, byCategory, failuresByTool, failuresByCategory, record);
-    estimatedTokensSaved += record.tokensSaved ?? 0;
+    // Same identity rule as tracker.record: a shadow match saved nothing.
+    if (record.status === "success" && record.wasHealed && record.shadow !== true) {
+      estimatedTokensSaved += record.tokensSaved ?? 0;
+    }
   }
   return {
     version: SUMMARY_VERSION,
@@ -277,6 +296,7 @@ function snapshotAggregate(stats: NormalizerAggregate): PersistedAggregate {
     promoted: stats.promoted,
     passThrough: stats.passThrough,
     passThroughFailed: stats.passThroughFailed,
+    shadowMatches: stats.shadowMatches,
     estimatedTokensSaved: stats.estimatedTokensSaved,
     byTool: { ...stats.byTool },
     byCategory: { ...stats.byCategory },
@@ -338,6 +358,8 @@ export async function restoreFromLog(
     promoted: aggregate.promoted ?? 0,
     passThrough: aggregate.passThrough,
     passThroughFailed: aggregate.passThroughFailed,
+    // Optional on disk: like promoted, older summaries load the counter as 0.
+    shadowMatches: aggregate.shadowMatches ?? 0,
     estimatedTokensSaved: aggregate.estimatedTokensSaved,
     healingSuccessRate: healingRate(aggregate),
     byTool: safeCountMap(aggregate.byTool),
@@ -346,7 +368,9 @@ export async function restoreFromLog(
     failuresByCategory: safeCountMap(aggregate.failuresByCategory ?? {}),
     recentRecords,
   };
-  tracker.restore(stats);
+  // The full replay stream (not the ring window) rebuilds signature
+  // aggregates, so candidate counts survive restarts at their true totals.
+  tracker.restore(stats, records);
 }
 
 function enqueue(task: () => Promise<void>): void {

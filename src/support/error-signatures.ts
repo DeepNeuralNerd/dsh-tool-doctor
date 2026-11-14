@@ -20,7 +20,7 @@
  */
 
 import type { ConfigFlag, DoctorConfig, HealCategory } from "../types.ts";
-import type { NormalizerRecord } from "./tracker.ts";
+import type { NormalizerRecord, SignatureAggregate } from "./tracker.ts";
 import { CATEGORY_META, CATEGORY_TO_FLAG } from "../stages/index.ts";
 
 /** How the existing rule set relates to one error pattern. */
@@ -199,21 +199,10 @@ export function hintRule(errorMessage: string): number | undefined {
   return undefined;
 }
 
-interface CandidateGroup {
-  key: string;
-  toolName: string;
-  signature: string;
-  count: number;
-  firstSeen: number;
-  lastSeen: number;
-  categories: Set<HealCategory>;
-  healedCategories: HealCategory[];
-  latest: NormalizerRecord;
-  recordIds: string[];
-}
-
 /**
  * Group failed records into deduplicated recurring error candidates.
+ * Records-only view (the dashboard ring); prefer candidatesFromAggregates for
+ * the endpoint, which counts every failure the tracker ever saw.
  * @param records - Tracker records (any status); only failures are grouped.
  * @param limit - Maximum candidates returned (default 60).
  * @param config - Effective flags, used to turn a coverage gap into a concrete
@@ -225,7 +214,7 @@ export function buildErrorCandidates(
   limit = 60,
   config?: DoctorConfig,
 ): ErrorCandidate[] {
-  const groups = new Map<string, CandidateGroup>();
+  const groups = new Map<string, SignatureAggregate>();
   for (const record of records) {
     if (record.status !== "failed") continue;
     const signature = normalizeErrorSignature(record.errorMessage ?? "");
@@ -239,9 +228,9 @@ export function buildErrorCandidates(
         count: 0,
         firstSeen: record.time,
         lastSeen: record.time,
-        categories: new Set(),
+        categories: [],
         healedCategories: [],
-        latest: record,
+        latest: {},
         recordIds: [],
       };
       groups.set(key, group);
@@ -250,9 +239,12 @@ export function buildErrorCandidates(
     if (record.time < group.firstSeen) group.firstSeen = record.time;
     if (record.time >= group.lastSeen) {
       group.lastSeen = record.time;
-      group.latest = record;
+      group.latest = {
+        errorMessage: record.errorMessage ?? "",
+        originalArgsPreview: record.originalArgsPreview ?? "",
+      };
     }
-    group.categories.add(record.category);
+    if (!group.categories.includes(record.category)) group.categories.push(record.category);
     if (
       record.category !== "PASSTHROUGH" &&
       !group.healedCategories.includes(record.category)
@@ -261,9 +253,21 @@ export function buildErrorCandidates(
     }
     if (group.recordIds.length < 10) group.recordIds.push(record.id);
   }
+  return candidatesFromAggregates([...groups.values()], limit, config);
+}
 
+/**
+ * Judge and rank already-grouped recurring patterns — the tracker's durable
+ * signature aggregates and the record-window grouping share this one path,
+ * so a candidate reads identically wherever it was grouped.
+ */
+export function candidatesFromAggregates(
+  aggregates: readonly SignatureAggregate[],
+  limit = 60,
+  config?: DoctorConfig,
+): ErrorCandidate[] {
   const candidates: ErrorCandidate[] = [];
-  for (const group of groups.values()) {
+  for (const group of aggregates) {
     let verdict: CandidateVerdict;
     let ruleHint: number | undefined;
     if (group.healedCategories.length > 0) {
@@ -291,7 +295,7 @@ export function buildErrorCandidates(
       sample: {
         errorMessage: group.latest.errorMessage ?? "",
         originalArgsPreview: group.latest.originalArgsPreview ?? "",
-        recordIds: group.recordIds,
+        recordIds: [...group.recordIds],
       },
     });
   }

@@ -10,6 +10,37 @@
  */
 
 import type { HealCategory } from "../types.ts";
+import { normalizeErrorSignature } from "./error-signatures.ts";
+
+/**
+ * Sample kept per recurring signature: enough context to show the candidate
+ * without holding the record itself (the ring window may evict it long ago).
+ */
+export interface SignatureSample {
+  errorMessage?: string;
+  originalArgsPreview?: string;
+}
+
+/**
+ * Accumulated view of ONE recurring error pattern (tool + normalized
+ * signature), maintained incrementally for EVERY failed record — independent
+ * of the bounded dashboard ring, so a pattern that stopped recurring inside
+ * the display window still shows its true count. Bounded map: oldest
+ * (least-recently-seen) signatures are evicted past the cap.
+ */
+export interface SignatureAggregate {
+  key: string;
+  toolName: string;
+  signature: string;
+  count: number;
+  firstSeen: number;
+  lastSeen: number;
+  categories: HealCategory[];
+  /** Categories whose rule ran and the call still failed (candidate verdict). */
+  healedCategories: HealCategory[];
+  latest: SignatureSample;
+  recordIds: string[];
+}
 
 /** A single recorded tool-healing event. */
 export interface NormalizerRecord {
@@ -35,6 +66,12 @@ export interface NormalizerRecord {
    * skipped model round-trips. Absent for unhealed or unmetered events.
    */
   tokensSaved?: number;
+  /**
+   * True when shadow mode evaluated the repair but dispatched the ORIGINAL
+   * arguments. Counted as a would-repair match, not as a heal (see
+   * NormalizerStats.shadowMatches). Absent on every non-shadow record.
+   */
+  shadow?: boolean;
 }
 
 /** Aggregated statistics across all recorded tool executions. */
@@ -52,6 +89,14 @@ export interface NormalizerStats {
   passThrough: number;
   /** Failed calls that reached the host without a normalization attempt. */
   passThroughFailed: number;
+  /**
+   * Shadow-mode matches: a rule matched and the repair was recorded, but the
+   * ORIGINAL arguments were dispatched (measurement-only deployment). Their
+   * execution outcomes land in passThrough/passThroughFailed — what actually
+   * ran — never in healedSuccess/healedFailed or token savings, which would
+   * claim a repair that never applied.
+   */
+  shadowMatches: number;
   /** Sum of measured input tokens avoided across successful healing events. */
   estimatedTokensSaved: number;
   healingSuccessRate: number; // 0 - 100
@@ -82,6 +127,7 @@ export type NormalizerAggregate = Pick<
   | "promoted"
   | "passThrough"
   | "passThroughFailed"
+  | "shadowMatches"
   | "estimatedTokensSaved"
   | "byTool"
   | "byCategory"
@@ -106,6 +152,7 @@ export class ToolNormalizerTracker {
   private promoted = 0;
   private passThrough = 0;
   private passThroughFailed = 0;
+  private shadowMatches = 0;
   private estimatedTokensSaved = 0;
   private byTool: Record<string, number> = Object.create(null) as Record<
     string,
@@ -125,6 +172,13 @@ export class ToolNormalizerTracker {
   /** Dashboard transport window; the JSONL log holds the unbounded history. */
   private records: NormalizerRecord[] = [];
   private maxRecords = 1000;
+  /**
+   * Recurring-error aggregates keyed by tool+signature, fed by EVERY failed
+   * record regardless of the ring window — the candidate list's source, so
+   * counts never silently reset when history scrolls out of the display.
+   */
+  private signatures = new Map<string, SignatureAggregate>();
+  private maxSignatures = 200;
   private persistPassthrough = false;
 
   /**
@@ -136,6 +190,13 @@ export class ToolNormalizerTracker {
     // execution outcome exists yet to count as healed success or failure.
     if (record.status === "promoted") {
       this.promoted++;
+    } else if (record.shadow === true) {
+      // Shadow mode dispatched the ORIGINAL arguments, so the outcome belongs
+      // to the untouched call — a would-repair match plus an honest
+      // pass-through outcome, never a heal or a saving.
+      this.shadowMatches++;
+      if (record.status === "failed") this.passThroughFailed++;
+      else this.passThrough++;
     } else if (record.status === "success" && record.wasHealed) {
       this.healedSuccess++;
     } else if (record.status === "failed" && record.wasHealed) {
@@ -160,11 +221,15 @@ export class ToolNormalizerTracker {
         (this.failuresByTool[record.toolName] ?? 0) + 1;
       this.failuresByCategory[record.category] =
         (this.failuresByCategory[record.category] ?? 0) + 1;
+      // Recurring-pattern aggregate: fed by every failure, not just the
+      // records that remain in the dashboard ring.
+      this.aggregateSignature(record);
     }
 
     // Token-savings accrues with the healed, successful event itself; the
     // per-record figure is measured at dispatch time by the token-meter.
-    if (record.status === "success" && record.wasHealed) {
+    // Shadow matches never saved anything — the original went out unchanged.
+    if (record.status === "success" && record.wasHealed && record.shadow !== true) {
       this.estimatedTokensSaved += record.tokensSaved ?? 0;
     }
 
@@ -175,6 +240,74 @@ export class ToolNormalizerTracker {
         this.records.pop();
       }
     }
+  }
+
+  /**
+   * Merge one failure into its tool+signature aggregate. Same merge rules as
+   * the record-window grouping in buildErrorCandidates, applied incrementally
+   * so the count survives the ring window entirely.
+   */
+  private aggregateSignature(record: NormalizerRecord): void {
+    const signature = normalizeErrorSignature(record.errorMessage ?? "");
+    const key = `${record.toolName} ${signature}`;
+    let agg = this.signatures.get(key);
+    if (agg === undefined) {
+      agg = {
+        key,
+        toolName: record.toolName,
+        signature,
+        count: 0,
+        firstSeen: record.time,
+        lastSeen: record.time,
+        categories: [],
+        healedCategories: [],
+        latest: {},
+        recordIds: [],
+      };
+      this.signatures.set(key, agg);
+      this.evictSignatures();
+    }
+    agg.count += 1;
+    if (record.time < agg.firstSeen) agg.firstSeen = record.time;
+    if (record.time >= agg.lastSeen) {
+      agg.lastSeen = record.time;
+      agg.latest = {
+        errorMessage: record.errorMessage ?? "",
+        originalArgsPreview: record.originalArgsPreview ?? "",
+      };
+    }
+    if (!agg.categories.includes(record.category)) agg.categories.push(record.category);
+    if (
+      record.category !== "PASSTHROUGH" &&
+      !agg.healedCategories.includes(record.category)
+    ) {
+      agg.healedCategories.push(record.category);
+    }
+    if (agg.recordIds.length < 10) agg.recordIds.push(record.id);
+  }
+
+  /** Bound the map: past the cap, drop the least-recently-seen signatures. */
+  private evictSignatures(): void {
+    while (this.signatures.size > this.maxSignatures) {
+      let oldestKey: string | undefined;
+      let oldest = Number.POSITIVE_INFINITY;
+      for (const [key, agg] of this.signatures) {
+        if (agg.lastSeen < oldest) {
+          oldest = agg.lastSeen;
+          oldestKey = key;
+        }
+      }
+      if (oldestKey === undefined) return;
+      this.signatures.delete(oldestKey);
+    }
+  }
+
+  /**
+   * Current recurring-error aggregates (any order). The candidate endpoint
+   * converts these; counts span the tracker's whole lifetime, not the ring.
+   */
+  public getSignatureAggregates(): SignatureAggregate[] {
+    return [...this.signatures.values()];
   }
 
   /**
@@ -189,15 +322,18 @@ export class ToolNormalizerTracker {
   /**
    * Rebuild aggregates from a replayed history (JSONL log restore). Counters
    * and maps are replaced wholesale; the record ring keeps the newest window
-   * of the supplied events.
+   * of the supplied events. Signature aggregates rebuild from `allRecords`
+   * when the caller has the full replay — a candidate count must not stop at
+   * the ring window — and from the ring alone otherwise.
    */
-  public restore(stats: NormalizerStats): void {
+  public restore(stats: NormalizerStats, allRecords?: readonly NormalizerRecord[]): void {
     this.totalIntercepted = stats.totalIntercepted;
     this.healedSuccess = stats.healedSuccess;
     this.healedFailed = stats.healedFailed;
     this.promoted = stats.promoted;
     this.passThrough = stats.passThrough;
     this.passThroughFailed = stats.passThroughFailed;
+    this.shadowMatches = stats.shadowMatches ?? 0;
     this.estimatedTokensSaved = stats.estimatedTokensSaved;
     this.byTool = Object.assign(Object.create(null), stats.byTool) as Record<
       string,
@@ -219,6 +355,10 @@ export class ToolNormalizerTracker {
       .filter((record) => this.persistPassthrough || isDiagnosticRecord(record))
       .sort((a, b) => b.time - a.time)
       .slice(0, this.maxRecords);
+    this.signatures = new Map();
+    for (const record of allRecords ?? stats.recentRecords) {
+      if (record.status === "failed") this.aggregateSignature(record);
+    }
   }
 
   /** Full snapshot including the bounded record ring for dashboard transport. */
@@ -235,6 +375,7 @@ export class ToolNormalizerTracker {
       promoted: this.promoted,
       passThrough: this.passThrough,
       passThroughFailed: this.passThroughFailed,
+      shadowMatches: this.shadowMatches,
       estimatedTokensSaved: this.estimatedTokensSaved,
       byTool: { ...this.byTool },
       byCategory: { ...this.byCategory },
@@ -258,11 +399,13 @@ export class ToolNormalizerTracker {
     this.promoted = 0;
     this.passThrough = 0;
     this.passThroughFailed = 0;
+    this.shadowMatches = 0;
     this.estimatedTokensSaved = 0;
     this.byTool = Object.create(null) as Record<string, number>;
     this.byCategory = Object.create(null) as Record<string, number>;
     this.failuresByTool = Object.create(null) as Record<string, number>;
     this.failuresByCategory = Object.create(null) as Record<string, number>;
     this.records = [];
+    this.signatures = new Map();
   }
 }
