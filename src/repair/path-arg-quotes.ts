@@ -17,9 +17,10 @@
  *    are never rewritten. Image readers joined the set on 2026-11-14 after the
  *    candidate ledger recorded a quote-wrapped `read_image` path passing
  *    through unrepaired — same emission artifact, same strict gate.
- *  - Only one outer pair of IDENTICAL quote characters (double, single or
- *    backtick) is stripped, and only when the unwrapped text is an absolute
- *    path (drive letter, UNC, or unix root). Anything else passes through — a
+ *  - Only one outer pair of quote characters is stripped — straight and
+ *    identical (double, single, backtick) or a matching curly pair — and only
+ *    when the unwrapped text is an absolute path (drive letter, UNC, or unix
+ *    root). Anything else passes through — a
  *    false heal costs a second failed call, so the gate stays strict.
  *  - Returns a shallow copy when something changed, undefined otherwise.
  *
@@ -43,8 +44,20 @@ const PATH_PARAMS = ["file_path", "path"] as const;
 /** Absolute-path shapes: C:\ or C:/, \\UNC, or unix root. */
 const ABSOLUTE_PATH = /^(?:[A-Za-z]:[\\/]|\\\\|\/)/;
 
-/** One pair of identical wrapping quotes with optional outer whitespace. */
-const WRAPPED = /^\s*(["'`])(.*?)\1\s*$/;
+/**
+ * Accepted wrapping pairs: one matched pair, straight quotes (identical open
+ * and close) or typographic curly pairs (“…”, ‘…’). Curly pairs joined on
+ * 2026-11-14: the production literature (OpenClaw's malformed-argument
+ * recovery) names smart-quoted arguments as a top emission class, and this
+ * host only tolerates curly quotes on `read`/`write`/`edit` paths.
+ */
+const WRAP_PAIRS: ReadonlyArray<readonly [open: string, close: string]> = [
+  ['"', '"'],
+  ["'", "'"],
+  ["`", "`"],
+  ["\u201c", "\u201d"], // “
+  ["\u2018", "\u2019"], // ‘
+];
 
 /**
  * Strip quote-wrapping from absolute-path arguments on file tools.
@@ -76,14 +89,18 @@ export function dequotePathArgs(
 }
 
 /**
- * The single heal: one matched outer quote pair whose inner text is an
- * absolute path. Empty inner text ("\"\"") is NOT unwrapped — an empty path
- * stays an explicit empty path.
+ * The single heal: one matched outer quote pair (straight or curly) whose
+ * inner text is an absolute path. Empty inner text ("\"\"") is NOT unwrapped —
+ * an empty path stays an explicit empty path.
  */
 export function unwrapQuotedPath(value: string): string | undefined {
-  const match = WRAPPED.exec(value);
-  if (!match) return undefined;
-  const inner = match[2] ?? "";
-  if (inner.length === 0) return undefined;
-  return ABSOLUTE_PATH.test(inner) ? inner : undefined;
+  const outer = value.trim();
+  for (const [open, close] of WRAP_PAIRS) {
+    if (outer.length <= open.length + close.length) continue;
+    if (!outer.startsWith(open) || !outer.endsWith(close)) continue;
+    const inner = outer.slice(open.length, outer.length - close.length);
+    if (inner.trim().length === 0) return undefined;
+    return ABSOLUTE_PATH.test(inner) ? inner : undefined;
+  }
+  return undefined;
 }

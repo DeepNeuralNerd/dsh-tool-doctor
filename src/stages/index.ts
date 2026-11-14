@@ -27,6 +27,7 @@ import { pathQuotesStage } from "./path-quotes.ts";
 import { mnemonResultStage } from "./mnemon-result.ts";
 import { argUnwrapStage } from "./arg-unwrap.ts";
 import { typeCoercionStage } from "./type-coercion.ts";
+import { paramAliasStage } from "./param-alias.ts";
 import { pathNormalizerStage } from "./path-normalizer.ts";
 import { bridgeStage } from "./bridge.ts";
 import { toolNameStage } from "./tool-name.ts";
@@ -43,6 +44,9 @@ export const STAGES: readonly HealStage[] = [
   // object holding the tool's own keys with plausibly-typed values.
   argUnwrapStage,
   typeCoercionStage,
+  // Canonical key names before value repairs: stages downstream assume the
+  // tool's own parameter names are already in place.
+  paramAliasStage,
   runCodeStage,
   editorRangeStage,
   readArgsStage,

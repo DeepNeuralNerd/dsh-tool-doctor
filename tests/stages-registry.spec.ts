@@ -4,9 +4,9 @@ import { TOGGLE_KEYS } from "../src/support/config-overrides.ts";
 import type { HealCategory } from "../src/types.ts";
 
 describe("stage registry", () => {
-  it("registers sixteen stages in execution order (nine pre, seven post)", () => {
-    expect(STAGES).toHaveLength(16);
-    expect(PRE_STAGES).toHaveLength(9);
+  it("registers seventeen stages in execution order (ten pre, seven post)", () => {
+    expect(STAGES).toHaveLength(17);
+    expect(PRE_STAGES).toHaveLength(10);
     expect(POST_STAGES).toHaveLength(7);
     // Pre-stages come first in the registry.
     for (let i = 0; i < PRE_STAGES.length; i++) {
@@ -45,6 +45,7 @@ describe("stage registry", () => {
     expect(meta["RESPONSE_TOOL_HEAL"]?.ruleNumber).toBe(7);
     expect(meta["ARGS_UNWRAP"]?.ruleNumber).toBe(9);
     expect(meta["ARGS_TYPE"]?.ruleNumber).toBe(9);
+    expect(meta["PARAM_ALIAS"]?.ruleNumber).toBe(9);
     expect(meta["PATH_SEPARATORS"]?.ruleNumber).toBe(3);
     expect(meta["EDIT_WHITESPACE"]?.ruleNumber).toBe(4);
 
@@ -113,6 +114,7 @@ describe("stage registry", () => {
     expect(CATEGORY_TO_FLAG["READ_ARGS"]).toBe("autoClampRanges");
     expect(CATEGORY_TO_FLAG["UNKNOWN_TOOL"]).toBe("autoBridgeDirectTools");
     expect(CATEGORY_TO_FLAG["ARGS_TYPE"]).toBe("autoSchemaArgs");
+    expect(CATEGORY_TO_FLAG["PARAM_ALIAS"]).toBe("autoSchemaArgs");
     expect(CATEGORY_TO_FLAG["PATH_SEPARATORS"]).toBe("autoNormalizePaths");
     expect(CATEGORY_TO_FLAG["EDIT_WHITESPACE"]).toBe("autoFuzzyEdit");
   });

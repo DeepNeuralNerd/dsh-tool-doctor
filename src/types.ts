@@ -218,6 +218,7 @@ export const HEAL_CATEGORIES = [
   "EDIT_WHITESPACE",
   "TOOL_NAME",
   "KIND_CORRECTION",
+  "PARAM_ALIAS",
 ] as const;
 
 /** One recordable healing category. */

@@ -10,6 +10,28 @@ describe("unwrapQuotedPath", () => {
     expect(unwrapQuotedPath("'C:/tmp/a.md'")).toBe("C:/tmp/a.md");
   });
 
+  it("unwraps a curly double-quote pair (smart-quote emission, OpenClaw class)", () => {
+    expect(unwrapQuotedPath("“C:\\Users\\me\\file.txt”")).toBe("C:\\Users\\me\\file.txt");
+  });
+
+  it("unwraps a curly single-quote pair", () => {
+    expect(unwrapQuotedPath("‘C:/tmp/a.md’")).toBe("C:/tmp/a.md");
+  });
+
+  it("leaves a mixed curly/straight pair alone", () => {
+    expect(unwrapQuotedPath("“C:\\x\\f.txt\"")).toBeUndefined();
+  });
+
+  it("leaves a curly-wrapped relative path alone", () => {
+    expect(unwrapQuotedPath("“notes.md”")).toBeUndefined();
+  });
+
+  it("dequotes a curly-wrapped path on a file tool", () => {
+    const args = { file_path: "“C:\\dir\\f.txt”" };
+    const out = dequotePathArgs("read", args);
+    expect((out as Record<string, unknown>).file_path).toBe("C:\\dir\\f.txt");
+  });
+
   it("does not unwrap a bare path (no wrapping quotes)", () => {
     expect(unwrapQuotedPath("C:\\Users\\me\\file.txt")).toBeUndefined();
   });

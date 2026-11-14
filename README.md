@@ -20,7 +20,7 @@ Tool doctor is useful if you are new to DSH and want fewer avoidable interruptio
 
 ## What it does
 
-- **Repairs arguments before a call runs.** Supported cases include wrapped or stringified argument objects, values that conflict with an available tool schema, quoted paths, some path and range mistakes, and common `run_code` formatting errors.
+- **Repairs arguments before a call runs.** Supported cases include wrapped or stringified argument objects, values that conflict with an available tool schema, parameters sent under a well-known wrong name (renamed only when the tool's own schema confirms it), quoted paths (straight and curly), some path and range mistakes, and common `run_code` formatting errors.
 - **Recovers from selected tool errors.** Depending on the error and available tools, it can retry a range request at the reported bound, refresh file observation, retry an edit with a whitespace-equivalent anchor, correct an unambiguous tool name, or list a directory sent to a file reader.
 - **Recognizes in-text tool calls.** When the model emits supported call markup as text, the plugin can promote it to a structured tool call. Promotion is recorded separately from execution success.
 - **Provides diagnostics and controls.** The dashboard shows recent calls, repair outcomes, recurring error patterns, rule switches, and editable model guidance. A circuit breaker temporarily pauses recovery classes that repeatedly fail.

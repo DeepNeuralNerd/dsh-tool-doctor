@@ -5,7 +5,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- **Canonical parameter rename (PARAM_ALIAS, rule-9 family, stage 17).** The
+  parameter-filling taxonomies (arXiv 2507.15296; TALLM failure taxonomy,
+  UW/AST 2025) rank parameter-NAME hallucination — `filename` for `file_path`,
+  `regex` for `pattern` — among the top argument failure classes, and this
+  host rejects the invented key outright. The new pre-dispatch stage renames a
+  single unambiguous alias to the name the tool's OWN schema declares, gated
+  by `autoSchemaArgs` alongside the other schema-aware repairs; ambiguity,
+  missing schema, and unknown tools always pass through. Curated tables for
+  read/write/edit/glob/grep/read_image/modlens_read_image. Eleven tests added.
+
 ### Changed
+
+- **Path-quote unwrap now accepts matching curly pairs (“…”, ‘…’).** The
+  production literature (OpenClaw's malformed-argument recovery) names
+  smart-quoted arguments as a top emission class; this host only tolerates
+  curly quotes on `read`/`write`/`edit` paths, so `glob`, `grep`, `read_image`
+  and `modlens_read_image` now get the same heal. Mixed pairs still pass
+  through; five tests added.
 
 - **Whitespace edit-retry now strips trailing whitespace (rule 4).** Live probing
   found the one shape the generator abstained on: an `old_string` carrying

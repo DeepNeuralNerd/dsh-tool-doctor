@@ -44,6 +44,7 @@ export const CATEGORY_LABELS: Readonly<Record<HealCategory, string>> = {
   EDIT_WHITESPACE: "Whitespace-tolerant edit retry",
   TOOL_NAME: "Tool-name canonicalization",
   KIND_CORRECTION: "Directory-read kind correction",
+  PARAM_ALIAS: "Canonical parameter rename",
 };
 
 /** Recordable categories in registry order — mirrors HEAL_CATEGORIES. */
@@ -52,7 +53,7 @@ export const CATEGORY_ORDER: readonly HealCategory[] = [
   "RUN_CODE_DESC", "RUN_CODE_SYNTAX", "INNER_DESC", "FS_OBSERVED", "READ_ARGS",
   "PATH_QUOTES", "MNEMON_RESULT", "PASSTHROUGH", "RESPONSE_TOOL_HEAL",
   "ARGS_UNWRAP", "ARGS_TYPE", "PATH_SEPARATORS", "EDIT_WHITESPACE",
-  "TOOL_NAME", "KIND_CORRECTION",
+  "TOOL_NAME", "KIND_CORRECTION", "PARAM_ALIAS",
 ];
 
 /**
@@ -67,6 +68,7 @@ export const CATEGORY_TO_RULE: Readonly<Partial<Record<HealCategory, number>>> =
   UNKNOWN_TOOL: 2, TOOL_NAME: 2, KIND_CORRECTION: 10, FS_OBSERVED: 4,
   EDIT_WHITESPACE: 4, INVALID_ARGS: 1, CODE_WRAP: 1, RUN_CODE_DESC: 1,
   RUN_CODE_SYNTAX: 1, INNER_DESC: 1, RESPONSE_TOOL_HEAL: 7,
+  PARAM_ALIAS: 9,
 };
 
 /** Error-text hints toward an existing rule for failures no rule processed — mirrors TEXT_RULE_HINTS. */
@@ -92,6 +94,7 @@ export const CATEGORY_TO_FLAG: Readonly<Partial<Record<HealCategory, ConfigFlag>
   ARGS_UNWRAP: "autoSchemaArgs", ARGS_TYPE: "autoSchemaArgs",
   PATH_SEPARATORS: "autoNormalizePaths", EDIT_WHITESPACE: "autoFuzzyEdit",
   TOOL_NAME: "autoBridgeDirectTools", KIND_CORRECTION: "autoKindFixes",
+  PARAM_ALIAS: "autoSchemaArgs",
 };
 
 /** Flags carrying each rule's repairs, registry order — mirrors RULE_FLAGS. */

@@ -32,7 +32,7 @@ export interface TypeCoercionResult {
  * @param def - The tool definition (unknown).
  * @returns A JSON Schema-like object with properties, or undefined if unusable.
  */
-function extractSchema(def: unknown): { type?: string; properties?: Record<string, unknown> } | undefined {
+export function extractSchema(def: unknown): { type?: string; properties?: Record<string, unknown> } | undefined {
   // Try inputSchema first
   if (typeof def === "object" && def !== null) {
     const schema = (def as any).inputSchema ?? (def as any).parameters;
