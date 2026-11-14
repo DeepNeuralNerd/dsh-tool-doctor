@@ -32,6 +32,12 @@ describe("unwrapQuotedPath", () => {
     expect((out as Record<string, unknown>).file_path).toBe("C:\\dir\\f.txt");
   });
 
+  it("leaves a unix-root path alone (quotes are legal in POSIX file names — identity risk)", () => {
+    // Review 2026-11-14: the Windows quote-illegality rationale does not extend
+    // to POSIX; a file may genuinely be named "/\"data.txt\"".
+    expect(unwrapQuotedPath('"/tmp/data.txt"')).toBeUndefined();
+  });
+
   it("does not unwrap a bare path (no wrapping quotes)", () => {
     expect(unwrapQuotedPath("C:\\Users\\me\\file.txt")).toBeUndefined();
   });

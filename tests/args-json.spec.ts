@@ -146,4 +146,38 @@ describe("repairArgsPayload", () => {
       expect((result!.args as Record<string, unknown>).q).toBe('say "hi,}" end');
     });
   });
+
+  // Reviewer round (2026-11-14): RFC 8259 §4 duplicate member names — JSON.parse
+  // keeps one value silently, so Doctor must never adopt an ambiguous payload.
+  describe("duplicate member-name guard (RFC 8259)", () => {
+    it("refuses a payload whose top-level name repeats (silent last-wins target swap)", () => {
+      expect(repairArgsPayload('{"file_path":"safe.txt","file_path":"other.txt"}')).toBeUndefined();
+    });
+
+    it("refuses even when both values are identical (ambiguity is the signal)", () => {
+      expect(repairArgsPayload('{"a":1,"a":1}')).toBeUndefined();
+    });
+
+    it("refuses a duplicate nested inside a value object", () => {
+      expect(repairArgsPayload('{"meta":{"k":1,"k":2}}')).toBeUndefined();
+    });
+
+    it("refuses duplicates behind every recovery step: fenced, prose, double-encoded", () => {
+      expect(repairArgsPayload('```json\n{"a":1,"a":2}\n```')).toBeUndefined();
+      expect(repairArgsPayload('Sure! {"a":1,"a":2}')).toBeUndefined();
+      expect(repairArgsPayload(JSON.stringify('{"a":1,"a":2}'))).toBeUndefined();
+    });
+
+    it("does not mistake quoted text for a repeated name", () => {
+      const result = repairArgsPayload('{"a":"has \\"quoted\\": colon","b":2}');
+      expect(result).toBeDefined();
+      expect((result!.args as Record<string, unknown>).a).toBe('has "quoted": colon');
+    });
+
+    it("handles an escaped-quote member name without flagging it", () => {
+      const result = repairArgsPayload('{"he said \\"hi\\"":1,"plain":2}');
+      expect(result).toBeDefined();
+      expect((result!.args as Record<string, unknown>).plain).toBe(2);
+    });
+  });
 });

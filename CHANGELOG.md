@@ -7,6 +7,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- **Ambiguous-payload guard: duplicate JSON member names are never adopted.**
+  RFC 8259 §4 warns that repeated names produce unpredictable interoperability
+  behavior; `JSON.parse` resolves them silently (last value wins), so a
+  stringified payload like `{"file_path":"safe.txt","file_path":"other.txt"}`
+  could be adopted by the args-JSON ladder while silently selecting a
+  different target than the model intended. The stringified-args repair now
+  scans every candidate JSON text before adopting it and abstains on any
+  duplicate name at any object level — the payload passes through unrepaired.
+  Found in the 2026-11-14 reviewer-model pass. Six tests added.
+
 - **Canonical parameter rename (PARAM_ALIAS, rule-9 family, stage 17).** The
   parameter-filling taxonomies (arXiv 2507.15296; TALLM failure taxonomy,
   UW/AST 2025) rank parameter-NAME hallucination — `filename` for `file_path`,
@@ -18,6 +28,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   read/write/edit/glob/grep/read_image/modlens_read_image. Eleven tests added.
 
 ### Changed
+
+- **Path-quote unwrap is Windows-shaped only (review follow-up).** The
+  absolute-path gate no longer fires on unix-root paths: the safety rationale
+  ("no file name may contain a quote character") is a Windows rule — POSIX
+  file names may legitimately contain quotes, so unwrapping `"/tmp/data.txt"`
+  could change a file's identity rather than restore it, and this host's file
+  tools never receive unix-root paths. One regression test added.
 
 - **Path-quote unwrap now accepts matching curly pairs (“…”, ‘…’).** The
   production literature (OpenClaw's malformed-argument recovery) names

@@ -7,6 +7,10 @@
  *  - A STRING payload is recovered through ordered stages (plain parse,
  *    markdown-fence strip, prose slice, trailing-comma strip, double-decode);
  *    the rewrite is adopted only when the final parse yields a plain object.
+ *  - Ambiguity guard (RFC 8259 §4, reviewer pass 2026-11-14): a payload whose
+ *    JSON text repeats a member name at any object level is NEVER adopted —
+ *    JSON.parse resolves duplicates silently (last value wins), which for tool
+ *    arguments means a possibly different target than the model intended.
  *
  * @module dsh-tool-doctor/repair/args-json
  */
@@ -87,58 +91,111 @@ function extractJsonObjectFromProse(input: string): string | undefined {
   return input.slice(startIdx, endIdx + 1);
 }
 
-function parseWithRecovery(raw: string): { value: Record<string, unknown>; changes: string[] } | null {
-  // Step a: plain JSON.parse
-  try {
-    const parsed = JSON.parse(raw);
-    if (isPlainObject(parsed)) {
-      return { value: parsed as Record<string, unknown>, changes: ["plain JSON.parse"] };
+/**
+ * RFC 8259 §4: member names within an object SHOULD be unique — but JSON.parse
+ * resolves a duplicate silently (last value wins). For tool arguments that is
+ * a silent target swap: {"file_path":"safe.txt","file_path":"other.txt"} reads
+ * the second file while the model may have meant the first. Doctor never
+ * adopts a string payload whose JSON text carries a duplicate member name at
+ * any object level; such payloads pass through unrepaired.
+ *
+ * Scanner contract: runs only on text that just strict-parsed, so it may
+ * assume well-formed JSON. Strings are skipped wholesale (escape-respecting);
+ * a string inside an OBJECT scope counts as a member name iff the next
+ * non-whitespace character is ':'. Raw-name comparison is conservative — two
+ * differently-escaped spellings of one name are a MISSED duplicate, never a
+ * false alarm.
+ */
+function hasDuplicateMemberNames(input: string): boolean {
+  const scopes: Array<Set<string>> = [];
+  const n = input.length;
+  let i = 0;
+  while (i < n) {
+    const ch = input[i];
+    if (ch === '"') {
+      let j = i + 1;
+      let escaped = false;
+      while (j < n) {
+        const c = input[j];
+        if (escaped) escaped = false;
+        else if (c === "\\") escaped = true;
+        else if (c === '"') break;
+        j++;
+      }
+      const scope = scopes[scopes.length - 1];
+      if (scope) {
+        let k = j + 1;
+        while (k < n && /\s/.test(input[k])) k++;
+        if (input[k] === ":") {
+          const raw = input.slice(i, j + 1);
+          if (scope.has(raw)) return true;
+          scope.add(raw);
+        }
+      }
+      i = j + 1;
+      continue;
     }
-  } catch {}
+    if (ch === "{" || ch === "[") scopes.push(new Set());
+    else if (ch === "}" || ch === "]") scopes.pop();
+    i++;
+  }
+  return false;
+}
+
+/** Strict parse → plain object, AND unambiguous (no duplicate member names). */
+function parseUnambiguousObject(text: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(text);
+    if (!isPlainObject(parsed)) return null;
+    if (hasDuplicateMemberNames(text)) return null;
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function parseWithRecovery(raw: string): { value: Record<string, unknown>; changes: string[] } | null {
+  // Step a: plain JSON.parse (adopted only when unambiguous)
+  const plain = parseUnambiguousObject(raw);
+  if (plain) {
+    return { value: plain, changes: ["plain JSON.parse"] };
+  }
 
   // Step b: strip markdown fences then parse
   const withFencesStripped = stripMarkdownFences(raw);
   if (withFencesStripped !== undefined) {
-    try {
-      const parsed = JSON.parse(withFencesStripped);
-      if (isPlainObject(parsed)) {
-        return { value: parsed as Record<string, unknown>, changes: ["strip markdown fences", "JSON.parse"] };
-      }
-    } catch {}
+    const parsed = parseUnambiguousObject(withFencesStripped);
+    if (parsed) {
+      return { value: parsed, changes: ["strip markdown fences", "JSON.parse"] };
+    }
   }
 
   // Step c: slice from first "{" to last "}" then parse
   const withProseStripped = extractJsonObjectFromProse(raw);
   if (withProseStripped !== undefined) {
-    try {
-      const parsed = JSON.parse(withProseStripped);
-      if (isPlainObject(parsed)) {
-        return { value: parsed as Record<string, unknown>, changes: ["extract from prose", "JSON.parse"] };
-      }
-    } catch {}
+    const parsed = parseUnambiguousObject(withProseStripped);
+    if (parsed) {
+      return { value: parsed, changes: ["extract from prose", "JSON.parse"] };
+    }
   }
 
   // Step d: remove trailing commas then parse
   const withTrailingCommasStripped = stripTrailingCommas(raw);
   if (withTrailingCommasStripped !== raw) {
-    try {
-      const parsed = JSON.parse(withTrailingCommasStripped);
-      if (isPlainObject(parsed)) {
-        return { value: parsed as Record<string, unknown>, changes: ["strip trailing commas", "JSON.parse"] };
-      }
-    } catch {}
+    const parsed = parseUnambiguousObject(withTrailingCommasStripped);
+    if (parsed) {
+      return { value: parsed, changes: ["strip trailing commas", "JSON.parse"] };
+    }
   }
 
   // Step e: double-encoded JSON
   try {
     const firstParse = JSON.parse(raw);
     if (typeof firstParse === "string") {
-      try {
-        const parsed = JSON.parse(firstParse);
-        if (isPlainObject(parsed)) {
-          return { value: parsed as Record<string, unknown>, changes: ["double-encoded JSON", "JSON.parse"] };
-        }
-      } catch {}
+      const parsed = parseUnambiguousObject(firstParse);
+      if (parsed) {
+        return { value: parsed, changes: ["double-encoded JSON", "JSON.parse"] };
+      }
     }
   } catch {}
 

@@ -19,8 +19,8 @@
  *    through unrepaired — same emission artifact, same strict gate.
  *  - Only one outer pair of quote characters is stripped — straight and
  *    identical (double, single, backtick) or a matching curly pair — and only
- *    when the unwrapped text is an absolute path (drive letter, UNC, or unix
- *    root). Anything else passes through — a
+ *    when the unwrapped text is a WINDOWS absolute path (drive letter or UNC);
+ *    mixed pairs and unix-root paths pass through. A
  *    false heal costs a second failed call, so the gate stays strict.
  *  - Returns a shallow copy when something changed, undefined otherwise.
  *
@@ -41,8 +41,15 @@ const PATH_TOOLS: ReadonlySet<string> = new Set([
 /** Parameter names on those tools that are file/directory paths. */
 const PATH_PARAMS = ["file_path", "path"] as const;
 
-/** Absolute-path shapes: C:\ or C:/, \\UNC, or unix root. */
-const ABSOLUTE_PATH = /^(?:[A-Za-z]:[\\/]|\\\\|\/)/;
+/**
+ * Absolute-path shapes: C:\ or C:/, or \\UNC — Windows forms ONLY. A reviewer
+ * pass (2026-11-14) removed the unix-root branch: quotes are legal characters
+ * in POSIX file names, so unwrapping `"/tmp/data.txt"` could change a file's
+ * identity rather than restore it, and this host's file tools never receive
+ * unix-root paths. The Windows rationale (quotes are reserved characters and
+ * cannot appear in a name) is what makes the unwrap semantics-preserving.
+ */
+const ABSOLUTE_PATH = /^(?:[A-Za-z]:[\\/]|\\\\)/;
 
 /**
  * Accepted wrapping pairs: one matched pair, straight quotes (identical open
