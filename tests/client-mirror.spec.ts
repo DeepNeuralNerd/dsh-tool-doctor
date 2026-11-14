@@ -32,6 +32,7 @@ import {
   FIX_PROPOSE_MIN_COUNT as M_MIN_COUNT,
   FIX_PROPOSE_MIN_SPAN_MS as M_MIN_SPAN,
   RULES as M_RULES,
+  RULE_GROUPS as M_RULE_GROUPS,
   fixEligible as mEligible,
   hintRule as mHintRule,
   normalizeErrorSignature as mSignature,
@@ -99,6 +100,16 @@ describe("client mirror — rule cards", () => {
     for (const card of M_RULES) {
       expect(typeof dictionary[card.titleKey], card.titleKey).toBe("string");
       expect(typeof dictionary[card.descKey], card.descKey).toBe("string");
+    }
+  });
+
+  it("the rules-tab purpose groups partition the rule cards exactly", () => {
+    const grouped = M_RULE_GROUPS.flatMap((g) => [...g.flags]);
+    // Every flag exactly once — grouping is layout, never a hidden toggle set.
+    expect([...grouped].sort()).toEqual(M_RULES.map((c) => c.flag).sort());
+    const dictionary = en as Record<string, unknown>;
+    for (const group of M_RULE_GROUPS) {
+      expect(typeof dictionary[group.titleKey], group.titleKey).toBe("string");
     }
   });
 });

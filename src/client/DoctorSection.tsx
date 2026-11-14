@@ -23,6 +23,7 @@ import {
   FIX_PROPOSE_MIN_COUNT,
   FIX_PROPOSE_MIN_SPAN_MS,
   RULES,
+  RULE_GROUPS,
   fixEligible,
   hintRule,
   normalizeErrorSignature,
@@ -317,9 +318,11 @@ function KpiCard(props: {
   toneClass?: string;
   badge?: string;
   extra?: ReactNode;
+  /** Secondary tier: smaller number, used below the outcome hero card. */
+  small?: boolean;
 }): ReactElement {
   return (
-    <div className={styles.kpiCard}>
+    <div className={`${styles.kpiCard} ${props.small ? styles.kpiCardSmall : ""}`}>
       <span className={styles.kpiTitle}>
         {props.title}
         {props.badge && <span className={styles.estimateBadge}>{props.badge}</span>}
@@ -327,6 +330,77 @@ function KpiCard(props: {
       <span className={`${styles.kpiValue} ${props.toneClass ?? ""}`}>{props.value}</span>
       {props.extra}
       {props.desc !== undefined && <span className={styles.kpiDesc}>{props.desc}</span>}
+    </div>
+  );
+}
+
+/**
+ * Small time trend of ACTUAL outcomes from the recorded events: one stacked
+ * mini-bar per time bucket, repaired under failed. Shadow matches are
+ * excluded — nothing was dispatched for them, so they have no outcome.
+ */
+function OutcomeTrend({ records, t }: { records: NormalizerRecord[]; t: TFn }): ReactElement {
+  const BUCKETS = 14;
+  const actual = records.filter((r) => r.shadow !== true);
+  const buckets = Array.from({ length: BUCKETS }, () => ({ ok: 0, bad: 0 }));
+  let from = Infinity;
+  let to = 0;
+  for (const r of actual) {
+    if (r.time < from) from = r.time;
+    if (r.time > to) to = r.time;
+  }
+  if (actual.length > 0 && to > from) {
+    for (const r of actual) {
+      const i = Math.min(BUCKETS - 1, Math.floor(((r.time - from) / (to - from)) * BUCKETS));
+      if (r.wasHealed && r.status === "success") buckets[i]!.ok += 1;
+      else if (r.status === "failed") buckets[i]!.bad += 1;
+    }
+  }
+  const max = Math.max(1, ...buckets.map((b) => b.ok + b.bad));
+  const W = 280;
+  const H = 48;
+  const slot = W / BUCKETS;
+  const hasAny = buckets.some((b) => b.ok + b.bad > 0);
+  if (!hasAny) {
+    return <p className={styles.trendEmpty}>{t("trendEmpty")}</p>;
+  }
+  const okTotal = buckets.reduce((s, b) => s + b.ok, 0);
+  const badTotal = buckets.reduce((s, b) => s + b.bad, 0);
+  return (
+    <div className={styles.trendWrap}>
+      <svg
+        className={styles.trendSvg}
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        role="img"
+        aria-label={`${new Date(from).toLocaleTimeString()} – ${new Date(to).toLocaleTimeString()}: ${okTotal} ${t("trendRepaired")}, ${badTotal} ${t("trendFailed")}`}
+      >
+        {buckets.map((b, i) => {
+          const x = i * slot + slot * 0.18;
+          const w = slot * 0.64;
+          const okH = (b.ok / max) * H;
+          const badH = (b.bad / max) * H;
+          return (
+            <g key={i}>
+              {b.ok > 0 && <rect className={styles.trendBarOk} x={x} y={H - okH} width={w} height={okH} rx="1" />}
+              {b.bad > 0 && <rect className={styles.trendBarErr} x={x} y={H - okH - badH} width={w} height={badH} rx="1" />}
+            </g>
+          );
+        })}
+      </svg>
+      <div className={styles.trendLegend}>
+        <span>
+          <span className={`${styles.trendDot} ${styles.trendDotOk}`} aria-hidden="true" />
+          {t("trendRepaired")}
+        </span>
+        <span>
+          <span className={`${styles.trendDot} ${styles.trendDotErr}`} aria-hidden="true" />
+          {t("trendFailed")}
+        </span>
+        <span className={styles.trendSpan}>
+          {new Date(from).toLocaleTimeString()} – {new Date(to).toLocaleTimeString()}
+        </span>
+      </div>
     </div>
   );
 }
@@ -697,53 +771,53 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
         <p className={styles.apiError} role="alert">{t(ERROR_LINE[state.error.source])}</p>
       )}
 
-      {/* KPI hero row */}
-      <section className={styles.kpiGrid}>
-        <KpiCard title={t("kpiTotal")} value={stats.totalIntercepted} desc={t("kpiTotalDesc")} />
-        <KpiCard
-          title={t("kpiRate")}
-          value={`${stats.healingSuccessRate}%`}
-          toneClass={styles.kpiValueAccent}
-          extra={
-            <span className={styles.kpiMeter} aria-hidden="true">
-              <span className={styles.kpiMeterFill} style={{ width: `${Math.min(100, stats.healingSuccessRate)}%` }} />
+      {/* Overview: one outcome card leads (what actually happened to calls);
+          everything secondary sits smaller beneath it. */}
+      <section className={styles.overview}>
+        <div className={styles.outcomeCard}>
+          <div className={styles.outcomePrimary}>
+            <span className={styles.kpiTitle}>{t("outcomeTitle")}</span>
+            <span className={`${styles.outcomeValue} ${stats.healedSuccess > 0 ? styles.kpiValueSuccess : ""}`}>
+              {stats.healedSuccess}
             </span>
-          }
-          desc={t("kpiRateDesc")}
-        />
-        <KpiCard
-          title={t("kpiHealed")}
-          value={stats.healedSuccess}
-          toneClass={styles.kpiValueSuccess}
-          desc={stats.healedFailed > 0 ? `${stats.healedFailed} ${t("kpiHealedFailedSuffix")}` : t("kpiRateDesc")}
-        />
-        {(stats.shadowMatches > 0 || state.config?.["shadowMode"] === true) && (
+            <span className={styles.outcomeRateRow}>
+              <span className={styles.kpiMeter} aria-hidden="true">
+                <span className={styles.kpiMeterFill} style={{ width: `${Math.min(100, stats.healingSuccessRate)}%` }} />
+              </span>
+              <span className={styles.kpiDesc}>
+                {t("outcomeRepairedNote")} {stats.healingSuccessRate}% {t("kpiRateSuffix")}
+              </span>
+            </span>
+          </div>
+          <div className={styles.outcomeSplit}>
+            <div className={styles.outcomeSplitItem}>
+              <span className={`${styles.outcomeSplitValue} ${stats.healedFailed > 0 ? styles.kpiValueDanger : ""}`}>
+                {stats.healedFailed}
+              </span>
+              <span className={styles.outcomeSplitLabel}>{t("outcomeFailedRepairs")}</span>
+            </div>
+            <div className={styles.outcomeSplitItem}>
+              <span className={`${styles.outcomeSplitValue} ${stats.passThroughFailed > 0 ? styles.kpiValueDanger : ""}`}>
+                {stats.passThroughFailed}
+              </span>
+              <span className={styles.outcomeSplitLabel}>{t("outcomePassThroughFailed")}</span>
+            </div>
+          </div>
+        </div>
+        <div className={styles.kpiGrid}>
+          <KpiCard small title={t("kpiTotal")} value={stats.totalIntercepted} />
+          <KpiCard small title={t("kpiPromoted")} value={stats.promoted} toneClass={styles.kpiValueAccent} />
           <KpiCard
-            title={t("kpiShadow")}
-            value={stats.shadowMatches}
-            toneClass={styles.kpiValueAccent}
-            desc={t("kpiShadowDesc")}
+            small
+            title={t("kpiSavedTokens")}
+            badge={t("estimateBadge")}
+            value={formatTokens(stats.estimatedTokensSaved)}
+            toneClass={styles.kpiValueSuccess}
           />
-        )}
-        <KpiCard
-          title={t("kpiPromoted")}
-          value={stats.promoted}
-          toneClass={styles.kpiValueAccent}
-          desc={t("kpiPromotedDesc")}
-        />
-        <KpiCard
-          title={t("kpiSavedTokens")}
-          badge={t("estimateBadge")}
-          value={formatTokens(stats.estimatedTokensSaved)}
-          toneClass={styles.kpiValueSuccess}
-          desc={t("kpiSavedTokensDesc")}
-        />
-        <KpiCard
-          title={t("kpiUnrecovered")}
-          value={unrecoveredTotal}
-          toneClass={unrecoveredTotal > 0 ? styles.kpiValueDanger : undefined}
-          desc={t("kpiUnrecoveredDesc")}
-        />
+          {(stats.shadowMatches > 0 || state.config?.["shadowMode"] === true) && (
+            <KpiCard small title={t("kpiShadow")} value={stats.shadowMatches} toneClass={styles.kpiValueAccent} />
+          )}
+        </div>
       </section>
 
       {/* Tabs */}
@@ -773,6 +847,14 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
       {/* TAB: live execution log */}
       {state.activeTab === "live" && (
         <section className={styles.livePane}>
+          {(stats.shadowMatches > 0 || state.config?.["shadowMode"] === true) && (
+            <div className={styles.shadowBanner} role="status">
+              <span className={styles.shadowBannerLead}>{t("shadowBanner")}</span>
+              <span className={styles.shadowBannerCount}>
+                {stats.shadowMatches} {t("kpiShadow")}
+              </span>
+            </div>
+          )}
           {hasData ? (
             <>
               <div className={styles.toolbar}>
@@ -832,7 +914,8 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
                   <div className={styles.emptyTitle}>{t("noData")}</div>
                 </div>
               ) : (
-                <table className={styles.logTable}>
+                <div className={styles.tableWrap}>
+                  <table className={styles.logTable}>
                   <thead>
                     <tr>
                       <th>{t("colTime")}</th>
@@ -860,6 +943,7 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
                                 type="button"
                                 className={`${styles.expandBtn} ${open ? styles.expandBtnOpen : ""}`}
                                 aria-expanded={open}
+                                aria-controls={`doctor-detail-${record.id}`}
                                 onClick={() => toggleExpand(record.id)}
                               >
                                 {open ? t("hideDetails") : t("diffDetails")}
@@ -868,7 +952,7 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
                             </td>
                           </tr>
                           {open && (
-                            <tr className={styles.detailRow}>
+                            <tr id={`doctor-detail-${record.id}`} className={styles.detailRow}>
                               <td colSpan={5}>
                                 <DiffDetail record={record} t={t} copiedKey={copiedKey} onCopy={copyText} />
                               </td>
@@ -878,7 +962,8 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
                       );
                     })}
                   </tbody>
-                </table>
+                  </table>
+                </div>
               )}
             </>
           ) : (
@@ -894,6 +979,13 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
       {/* TAB: analytics */}
       {state.activeTab === "analytics" && (
         <section className={styles.analyticsPane}>
+          <div className={styles.trendCard}>
+            <div className={styles.trendHead}>
+              <div className={styles.cardTitle}>{t("trendTitle")}</div>
+              <p className={styles.kpiDesc}>{t("trendDesc")}</p>
+            </div>
+            <OutcomeTrend records={stats.recentRecords} t={t} />
+          </div>
           <div className={`${styles.healthCard} ${hasData ? "" : styles.healthCardMuted}`}>
             <div>
               <div className={styles.healthTitle}>{t("healthScoreTitle")}</div>
@@ -953,7 +1045,13 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
                 const open = expandedIds.has(candKey);
                 return (
                   <article key={candidate.key} className={styles.candCard}>
-                    <div className={styles.candHead} onClick={() => toggleExpand(candKey)}>
+                    <button
+                      type="button"
+                      className={styles.candHead}
+                      aria-expanded={open}
+                      aria-controls={`doctor-cand-${candidate.key}`}
+                      onClick={() => toggleExpand(candKey)}
+                    >
                       <div className={styles.candMetaCol}>
                         <span className={styles.badgeTool} title={candidate.toolName}>{candidate.toolName}</span>
                         <span className={`${styles.statusPill} ${verdictClass(candidate.verdict)}`}>
@@ -963,22 +1061,14 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
                       </div>
                       <div className={styles.candSide}>
                         <span className={styles.countBadge}>{candidate.count} {t("times")}</span>
-                        <button
-                          type="button"
-                          className={`${styles.expandBtn} ${open ? styles.expandBtnOpen : ""}`}
-                          aria-expanded={open}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleExpand(candKey);
-                          }}
-                        >
+                        <span className={`${styles.expandLabel} ${open ? styles.expandLabelOpen : ""}`}>
                           {open ? t("errorsHideSample") : t("errorsShowSample")}
                           <span className={styles.chevron}><ChevronIcon /></span>
-                        </button>
+                        </span>
                       </div>
-                    </div>
+                    </button>
                     {open && (
-                      <div className={styles.candBody}>
+                      <div id={`doctor-cand-${candidate.key}`} className={styles.candBody}>
                         <p className={styles.candVerdict}>{verdictSentence(candidate)}</p>
                         {candidate.fixable && candidate.proposedFix !== undefined ? (
                           <div className={styles.fixBlock}>
@@ -1048,38 +1138,59 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
       {/* TAB: rules, category health & guidance */}
       {state.activeTab === "rules" && (
         <section className={styles.rulesPane}>
+          {/* Paused breakers first: what is stopped right now outranks the
+              full toggle inventory. */}
+          {stats.breakerOpen.length > 0 && (
+            <div className={styles.breakerBar} role="status">
+              <span className={styles.breakerBarTitle}>{t("breakerBarTitle")}</span>
+              {stats.breakerOpen.map((category) => (
+                <span key={category} className={styles.openPill} title={t("breakerOpenHint")}>
+                  {categoryLabel(category)}
+                </span>
+              ))}
+            </div>
+          )}
           {toggleError && (
             <p className={styles.toggleError} role="alert">{toggleError}</p>
           )}
 
-          <div className={styles.rulesGrid}>
-            {RULES.map(({ flag, titleKey, descKey }) => {
-              const on = state.config ? state.config[flag] !== false : true;
-              const pending = pendingToggle === flag;
-              return (
-                <article key={flag} className={styles.ruleCard}>
-                  <div className={styles.ruleHead}>
-                    <h3 className={styles.ruleTitle}>{t(titleKey)}</h3>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={on}
-                      className={`${styles.ruleToggle} ${on ? styles.ruleToggleOn : ""}`}
-                      title={t(on ? "ruleTagActiveHint" : "ruleTagInactiveHint")}
-                      disabled={pendingToggle !== null}
-                      onClick={() => onToggleRule(flag, !on)}
-                    >
-                      <span className={styles.ruleToggleTrack} aria-hidden="true">
-                        <span className={styles.ruleToggleKnob} />
-                      </span>
-                      {pending ? "…" : on ? t("statusActive") : t("statusInactive")}
-                    </button>
-                  </div>
-                  <p className={styles.kpiDesc}>{t(descKey)}</p>
-                </article>
-              );
-            })}
-          </div>
+          {RULE_GROUPS.map((group) => {
+            const cards = RULES.filter((rule) => group.flags.includes(rule.flag));
+            if (cards.length === 0) return null;
+            return (
+              <div key={group.titleKey} className={styles.ruleGroup}>
+                <h3 className={styles.ruleGroupTitle}>{t(group.titleKey)}</h3>
+                <div className={styles.rulesGrid}>
+                  {cards.map(({ flag, titleKey, descKey }) => {
+                    const on = state.config ? state.config[flag] !== false : true;
+                    const pending = pendingToggle === flag;
+                    return (
+                      <article key={flag} className={styles.ruleCard}>
+                        <div className={styles.ruleHead}>
+                          <h3 className={styles.ruleTitle}>{t(titleKey)}</h3>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={on}
+                            className={`${styles.ruleToggle} ${on ? styles.ruleToggleOn : ""}`}
+                            title={t(on ? "ruleTagActiveHint" : "ruleTagInactiveHint")}
+                            disabled={pendingToggle !== null}
+                            onClick={() => onToggleRule(flag, !on)}
+                          >
+                            <span className={styles.ruleToggleTrack} aria-hidden="true">
+                              <span className={styles.ruleToggleKnob} />
+                            </span>
+                            {pending ? "…" : on ? t("statusActive") : t("statusInactive")}
+                          </button>
+                        </div>
+                        <p className={styles.kpiDesc}>{t(descKey)}</p>
+                      </article>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
 
           {/* Per-category rule health from the 14 recordable categories */}
           <div className={styles.rankCard}>

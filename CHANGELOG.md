@@ -2,6 +2,24 @@
 
 ## Unreleased (2026-11-14)
 
+- **Visual pass on truthful numbers (reviewer layout brief).** Overview now
+  has one prominent outcome card (actual repairs leading, with failed
+  repairs and unrecovered failures as honest split stats and the rate meter)
+  and a smaller supporting tier (intercepted, promoted, saved tokens,
+  would-repair). The live log gains a dashed shadow-mode banner whenever
+  shadow is active; log rows carry `aria-expanded`/`aria-controls`, and
+  candidate headers are real `<button>`s now — fully keyboard-operable with
+  one focus-visible ring across the panel. Analytics opens with a small
+  time trend of ACTUAL outcomes (stacked repaired/failed buckets computed
+  from the recorded events, shadow matches excluded). The Rules tab groups
+  all 13 toggles by purpose (Call repair / Model guidance / Recording) —
+  a mirror test pins the partition — and paused circuit breakers now lead
+  the tab. Narrow panels: the log table scrolls within its own wrapper
+  instead of widening the page. Verified via `scripts/visual-harness.mjs`:
+  real compiled CSS + mirrored markup, checked programmatically at 1280
+  and 460 px in light and dark, incl. empty, shadow and breaker-open
+  states — no overflow, correct theme token swaps.
+
 - **Unambiguous numbers: five dashboard-metric corrections (reviewer
   priorities 1–5).** (1) Promoted calls get their own status pill and filter
   chip — the live log no longer labels them "Passed through". (2) Shadow

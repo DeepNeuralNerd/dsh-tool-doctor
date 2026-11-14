@@ -239,6 +239,73 @@
   transition: width 260ms ease;
 }
 
+/* ---- Overview hierarchy: one outcome card leads, supporting numbers under ---- */
+
+.overview { display: flex; flex-direction: column; gap: 12px; }
+
+.outcomeCard {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  box-sizing: border-box;
+  padding: 20px 22px;
+  border: 1px solid var(--td-border);
+  border-left: 4px solid var(--td-ok);
+  border-radius: var(--td-radius-card);
+  background: var(--td-card);
+}
+
+.outcomePrimary { display: flex; flex-direction: column; gap: 6px; min-width: 180px; flex: 1 1 240px; }
+
+.outcomeValue {
+  font-size: 40px;
+  font-weight: 680;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.outcomeRateRow { display: flex; flex-direction: column; gap: 5px; max-width: 280px; margin-top: 2px; }
+
+.outcomeSplit { display: flex; gap: 26px; flex-wrap: wrap; }
+
+.outcomeSplitItem { display: flex; flex-direction: column; gap: 3px; justify-content: center; padding: 6px 0; }
+
+.outcomeSplitValue { font-size: 24px; font-weight: 660; line-height: 1.15; font-variant-numeric: tabular-nums; }
+
+.outcomeSplitLabel { font-size: 11.5px; color: var(--td-muted); }
+
+/* Supporting tier below the hero card: same card skin, smaller numbers. */
+.kpiCardSmall { padding: 11px 13px; gap: 3px; }
+.kpiCardSmall .kpiValue { font-size: 19px; }
+
+/* Shadow-mode notice in the live log: measurement, not repair. */
+.shadowBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 9px 13px;
+  border: 1px dashed color-mix(in srgb, var(--td-accent) 45%, transparent);
+  border-radius: var(--td-radius-inner);
+  background: color-mix(in srgb, var(--td-accent) 7%, transparent);
+  color: var(--td-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.shadowBannerLead { min-width: 0; flex: 1 1 auto; }
+
+.shadowBannerCount {
+  font-weight: 660;
+  color: var(--td-accent);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---- Tabs ---- */
 
 .tabsBar {
@@ -411,6 +478,10 @@
   border-top: 1px solid var(--td-border);
   vertical-align: middle;
 }
+
+/* On very narrow panels the table scrolls within itself; the page never
+   grows a second scrollbar because of it. */
+.tableWrap { overflow-x: auto; }
 
 .logRow { cursor: pointer; transition: background 120ms ease; }
 .logRow:hover { background: var(--td-inset); }
@@ -648,6 +719,39 @@
 
 .analyticsPane { display: flex; flex-direction: column; gap: 12px; }
 
+/* Time trend of actual outcomes (from the recorded events, not a score). */
+.trendCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 18px;
+  border: 1px solid var(--td-border);
+  border-radius: var(--td-radius-card);
+  background: var(--td-card);
+}
+
+.trendHead { display: flex; flex-direction: column; gap: 2px; }
+
+.trendWrap { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+
+.trendSvg { display: block; width: 100%; height: 52px; }
+
+.trendBarOk { fill: var(--td-ok); }
+.trendBarErr { fill: var(--td-err); }
+
+.trendLegend { display: flex; align-items: center; gap: 14px; font-size: 11px; color: var(--td-muted); }
+
+.trendLegend > span { display: inline-flex; align-items: center; gap: 5px; }
+
+.trendDot { width: 7px; height: 7px; border-radius: 2px; display: inline-block; }
+
+.trendDotOk { background: var(--td-ok); }
+.trendDotErr { background: var(--td-err); }
+
+.trendSpan { margin-left: auto; color: var(--td-dim); font-variant-numeric: tabular-nums; }
+
+.trendEmpty { margin: 0; font-size: 12px; color: var(--td-dim); }
+
 .healthCard {
   display: flex;
   align-items: flex-start;
@@ -769,14 +873,37 @@
   overflow: hidden;
 }
 
+/* The candidate header is a real <button> now (keyboard-operable): reset the
+   chrome and let the card skin carry the surface. */
 .candHead {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+  width: 100%;
+  box-sizing: border-box;
   padding: 10px 12px;
   cursor: pointer;
+  text-align: inherit;
+  color: inherit;
+  font: inherit;
+  background: none;
+  border: 0;
 }
+
+.candHead:hover { background: var(--td-inset); }
+
+/* Expand affordance inside the candidate button (the whole head is the target). */
+.expandLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 550;
+  color: var(--td-accent);
+}
+
+.expandLabelOpen .chevron { transform: rotate(180deg); }
 
 .candMetaCol { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 auto; }
 
@@ -822,6 +949,33 @@
 /* ---- Rules tab ---- */
 
 .rulesPane { display: flex; flex-direction: column; gap: 12px; width: 100%; box-sizing: border-box; }
+
+/* Rules grouped by purpose; a quiet section label carries the hierarchy. */
+.ruleGroup { display: flex; flex-direction: column; gap: 10px; }
+
+.ruleGroupTitle {
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--td-dim);
+}
+
+/* Paused breakers, top of the rules tab: what is stopped outranks inventory. */
+.breakerBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 13px;
+  border: 1px solid color-mix(in srgb, var(--td-err) 35%, transparent);
+  border-left: 3px solid var(--td-err);
+  border-radius: var(--td-radius-inner);
+  background: color-mix(in srgb, var(--td-err) 7%, transparent);
+}
+
+.breakerBarTitle { font-size: 12.5px; font-weight: 650; color: var(--td-err); }
 
 .rulesGrid {
   display: grid;
@@ -1198,10 +1352,21 @@
   flex-shrink: 0;
 }
 
+/* One honest focus ring for every interactive surface. */
+.expandBtn:focus-visible, .candHead:focus-visible, .ruleToggle:focus-visible,
+.tabItem:focus-visible, .pill:focus-visible, .btnGhost:focus-visible,
+.btnDanger:focus-visible, .guidanceSaveBtn:focus-visible, .fixBtn:focus-visible,
+.copyBtn:focus-visible, .searchInput:focus-visible {
+  outline: 2px solid var(--td-accent);
+  outline-offset: 2px;
+}
+
 /* ---- Narrow panels & motion ---- */
 
 @media (max-width: 720px) {
   .kpiGrid, .rankGrid, .diffColumns { grid-template-columns: minmax(0, 1fr); }
+  .outcomeCard { padding: 16px 17px; }
+  .outcomeValue { font-size: 34px; }
   .hero { padding: 15px 16px; }
   .headerActions { width: 100%; }
   .headerActions > button { flex: 1 1 auto; justify-content: center; }

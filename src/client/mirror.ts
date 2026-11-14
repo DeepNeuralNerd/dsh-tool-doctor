@@ -204,3 +204,34 @@ export const RULES: ReadonlyArray<{
   { flag: "autoKindFixes", titleKey: "ruleKindTitle", descKey: "ruleKindDesc" },
   { flag: "shadowMode", titleKey: "ruleShadowTitle", descKey: "ruleShadowDesc" },
 ];
+
+/**
+ * Purpose groups for the Rules tab layout — presentation only, never a new
+ * source of truth. The partition test in client-mirror.spec pins that every
+ * RULES flag appears in exactly one group.
+ */
+export const RULE_GROUPS: ReadonlyArray<{
+  titleKey: NormalizerKey;
+  flags: readonly ConfigFlag[];
+}> = [
+  {
+    titleKey: "ruleGroupRepairTitle",
+    flags: [
+      "autoWrapRunCode",
+      "autoBridgeDirectTools",
+      "autoSchemaArgs",
+      "autoKindFixes",
+      "autoFuzzyEdit",
+      "autoClampRanges",
+      "autoNormalizePaths",
+    ],
+  },
+  {
+    titleKey: "ruleGroupGuidanceTitle",
+    flags: ["healResponseTools", "injectPrompt", "errorHints"],
+  },
+  {
+    titleKey: "ruleGroupRecordTitle",
+    flags: ["autoObserveFiles", "persistPassthrough", "shadowMode"],
+  },
+];

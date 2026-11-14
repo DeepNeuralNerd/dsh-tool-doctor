@@ -50,6 +50,30 @@ export const en = {
   kpiShadowDesc:
     "Shadow mode matched these rules but dispatched the original arguments — measured coverage, not applied repairs.",
 
+  // Outcome hero card
+  outcomeTitle: "Repairs",
+  outcomeRepairedNote: "successful repairs —",
+  kpiRateSuffix: "of repair attempts succeeded.",
+  outcomeFailedRepairs: "failed repairs",
+  outcomePassThroughFailed: "unrecovered failures",
+  shadowBanner:
+    "Shadow mode is on: matches count as would-repair and the original arguments go out.",
+
+  // Analytics time trend
+  trendTitle: "Recent outcomes",
+  trendDesc: "Repaired vs failed calls across the recorded event window.",
+  trendEmpty: "No outcomes recorded in the window yet.",
+  trendRepaired: "repaired",
+  trendFailed: "failed",
+
+  // Rules purpose groups
+  ruleGroupRepairTitle: "Call repair",
+  ruleGroupGuidanceTitle: "Model guidance & responses",
+  ruleGroupRecordTitle: "Recording & measurement",
+
+  // Circuit-breaker summary (rules tab, top)
+  breakerBarTitle: "Paused by the circuit breaker:",
+
   // Status labels
   statusHealed: "Healed",
   statusFailed: "Failed",
