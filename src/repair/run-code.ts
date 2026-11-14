@@ -19,7 +19,10 @@ export function stripMarkdownFences(code: string): string {
   const trimmed = code.trim();
   const match = /^```(?:[A-Za-z0-9_-]+)?\r?\n([\s\S]*?)\r?\n```$/.exec(trimmed);
   if (match && match[1]) return match[1].trim();
-  return trimmed;
+  // Unfenced input passes through completely unchanged: trimming it here would
+  // make callers' fence tests (stripped !== original) report a fence where only
+  // whitespace moved.
+  return code;
 }
 
 /** Normalized `run_code` arguments: a body plus an honest description. */

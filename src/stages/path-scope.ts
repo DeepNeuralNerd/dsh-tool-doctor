@@ -26,6 +26,10 @@ export const pathScopeStage: PreStage = {
     if (!env.config.autoClampRanges) return undefined;
     const pruned = pruneWorkspaceSourcePaths(toolName, args, env.cwd());
     if (pruned === undefined) return undefined;
-    return { args: pruned, changes: ["Dropped sourcePaths outside the workspace"] };
+    return {
+      args: pruned,
+      changes: ["Dropped sourcePaths outside the workspace"],
+      category: "PATH_SCOPE",
+    };
   },
 };

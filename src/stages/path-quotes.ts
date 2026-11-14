@@ -26,6 +26,10 @@ export const pathQuotesStage: PreStage = {
     if (!env.config.autoClampRanges) return undefined;
     const dequoted = dequotePathArgs(toolName, args);
     if (dequoted === undefined) return undefined;
-    return { args: dequoted, changes: ["Stripped wrapping quotes from a path"] };
+    return {
+      args: dequoted,
+      changes: ["Stripped wrapping quotes from a path"],
+      category: "PATH_QUOTES",
+    };
   },
 };

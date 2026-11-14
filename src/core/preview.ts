@@ -27,6 +27,7 @@ const SECRET_KEY_SEGMENTS: ReadonlySet<string> = new Set([
   "secret",
   "token",
   "apikey",
+  "key",
   "authorization",
   "auth",
   "bearer",
@@ -62,11 +63,24 @@ const SECRET_PREFIX_RE = new RegExp(
 /** `scheme://user:password@host` — mask the password half only. */
 const URL_USERINFO_RE = /(\w+:\/\/[^:@/\s]+:)([^@\s/]+)(@)/g;
 
+/** `--password value` / `-p=value` style flag values in serialized commands. */
+const FLAG_VALUE_RE = /(^|\s)(-{1,2}[A-Za-z][\w.-]*)([= ])([^\s"',;)\]}>]+)/g;
+
+/** Does a command-line flag name (dashes included) look sensitive? */
+function isSecretFlag(flag: string): boolean {
+  const segments = flag
+    .replace(/^-{1,2}/, "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+  return segments.some((seg) => SECRET_KEY_SEGMENTS.has(seg));
+}
+
 /**
  * Mask sensitive values in a serialized argument preview. Deterministic and
- * conservative: it rewrites key-named fields, bearer tokens, well-known secret
- * prefixes, and URL passwords — nothing else moves, so paths and commands stay
- * readable for diagnosis.
+ * conservative: it rewrites key-named fields, sensitive command-line flag
+ * values, bearer tokens, well-known secret prefixes, and URL passwords —
+ * nothing else moves, so paths and commands stay readable for diagnosis.
  */
 export function redactSensitive(text: string): string {
   if (text.length === 0) return text;
@@ -74,6 +88,11 @@ export function redactSensitive(text: string): string {
     JSON_STRING_PAIR_RE,
     (pair, keyJson: string, sep: string, _valueJson: string) =>
       isSecretKey(keyJson) ? `${keyJson}${sep}"${REDACTED}"` : pair,
+  );
+  out = out.replace(
+    FLAG_VALUE_RE,
+    (m, pre: string, flag: string, sep: string) =>
+      isSecretFlag(flag) ? `${pre}${flag}${sep}${REDACTED}` : m,
   );
   out = out.replace(BEARER_RE, `Bearer ${REDACTED}`);
   out = out.replace(SECRET_PREFIX_RE, REDACTED);

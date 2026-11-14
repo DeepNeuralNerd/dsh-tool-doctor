@@ -27,6 +27,7 @@ export const readArgsStage: PreStage = {
     return {
       args: normalized,
       changes: ["Fixed offset/start argument (0→1 base correction)"],
+      category: "READ_ARGS",
     };
   },
 };

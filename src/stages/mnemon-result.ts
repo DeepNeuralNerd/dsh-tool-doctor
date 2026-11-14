@@ -28,6 +28,6 @@ export const mnemonResultStage: PreStage = {
     if (!env.config.autoClampRanges) return undefined;
     const repaired = repairMnemonResultArgs(toolName, args);
     if (repaired === undefined) return undefined;
-    return repaired;
+    return { ...repaired, category: "MNEMON_RESULT" };
   },
 };

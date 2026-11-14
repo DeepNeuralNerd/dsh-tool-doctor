@@ -125,9 +125,10 @@ interface HostContext {
  */
 function readCodeRuntimeLanguage(ctx: HostContext): string | undefined {
   const runtime = ctx.get("codeRuntime");
-  return typeof (runtime as { language?: unknown } | null)?.language === "string"
-    ? ((runtime as { language: string }).language)
-    : undefined;
+  const language = (runtime as { language?: unknown } | null)?.language;
+  // Normalized at the source so every consumer's language gate (exact or
+  // prefix) sees one canonical casing.
+  return typeof language === "string" ? language.toLowerCase() : undefined;
 }
 
 /** Number of extra model round-trips a successful heal removes (the table lives with each category's metadata in the stage registry). */
@@ -362,11 +363,14 @@ export function apply(ctxRaw: unknown, userConfig: Partial<DoctorConfig> = {}): 
     }
     if (pendingHeals.size === 0) return;
     resultFallback = true;
-    const backlog = [...pendingHeals.values()];
+    // Keep each call's id while recording inline so a late `tools/result`
+    // event (a slow host) meets the inlineRecorded suppression instead of
+    // recording the same call a second time.
+    const backlog = [...pendingHeals.entries()];
     pendingHeals.clear();
     stopFallbackTimer();
-    for (const { pending, outcome } of backlog) {
-      recordInline(undefined, pending, outcome);
+    for (const [callId, { pending, outcome }] of backlog) {
+      recordInline(callId, pending, outcome);
     }
   }
 
@@ -709,7 +713,8 @@ export function apply(ctxRaw: unknown, userConfig: Partial<DoctorConfig> = {}): 
             block?: { type?: string; text?: string };
           };
           if (c?.type === "block-end" && c.block?.type === "text" && typeof c.block.text === "string") {
-            const healed = healTextBlock(c.block.text, allowed, idPrefix, healSeq);
+            const blockText = c.block.text;
+            const healed = healTextBlock(blockText, allowed, idPrefix, healSeq);
             if (healed) {
               healSeq += healed.calls.length;
               // Re-emit the text block with the markup stripped. block-end
@@ -736,25 +741,30 @@ export function apply(ctxRaw: unknown, userConfig: Partial<DoctorConfig> = {}): 
                   block: { type: "tool-call", id: call.id, name: call.name, arguments: call.arguments },
                 };
               }
-              for (const call of healed.calls) {
-                try {
-                  const spanText = c.block.text.slice(call.span[0], call.span[1]) ?? call.name;
-                  recordEvent({
-                    id: `norm_resp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-                    time: Date.now(),
-                    toolName: call.name,
-                    category: "RESPONSE_TOOL_HEAL",
-                    wasHealed: true,
-                    originalArgsPreview: compactPreview(spanText),
-                    normalizedArgsPreview: compactPreview(call.arguments),
-                    // Promotion is not an execution outcome yet; count it in its
-                    // own bucket so healed-success stays a dispatch metric.
-                    status: "promoted",
-                  });
-                } catch {
-                  // Recording is diagnostic only; never disturb the stream.
+              // Same startup gate the dispatch and observer record paths use:
+              // a promotion that lands while history restore is in flight
+              // must not be overwritten by restore's aggregate replacement.
+              void restoreReady.then(() => {
+                for (const call of healed.calls) {
+                  try {
+                    const spanText = blockText.slice(call.span[0], call.span[1]) || call.name;
+                    recordEvent({
+                      id: `norm_resp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                      time: Date.now(),
+                      toolName: call.name,
+                      category: "RESPONSE_TOOL_HEAL",
+                      wasHealed: true,
+                      originalArgsPreview: compactPreview(spanText),
+                      normalizedArgsPreview: compactPreview(call.arguments),
+                      // Promotion is not an execution outcome yet; count it in its
+                      // own bucket so healed-success stays a dispatch metric.
+                      status: "promoted",
+                    });
+                  } catch {
+                    // Recording is diagnostic only; never disturb the stream.
+                  }
                 }
-              }
+              });
               continue;
             }
           }
@@ -795,13 +805,16 @@ function readBody(req: unknown): Promise<string> {
   return new Promise((resolve, reject) => {
     const stream = req as {
       on?: (event: string, cb: (...args: unknown[]) => void) => void;
-      destroy?: () => void;
     };
     if (typeof stream.on !== "function") {
       resolve("");
       return;
     }
-    let body = "";
+    // Count incoming BYTES, not characters: multibyte UTF-8 must not slip past
+    // the cap, and chunks are concatenated before decoding so a code point split
+    // across chunk boundaries decodes correctly.
+    const chunks: Buffer[] = [];
+    let bytes = 0;
     let settled = false;
     const settle = (fn: () => void): void => {
       if (!settled) {
@@ -810,18 +823,25 @@ function readBody(req: unknown): Promise<string> {
       }
     };
     stream.on("data", (chunk: unknown) => {
-      if (settled) return;
-      body += typeof chunk === "string" ? chunk : String(chunk);
-      if (body.length > MAX_BODY_BYTES) {
+      if (settled) return; // over the cap: discard, let the caller respond 413
+      const buf = Buffer.isBuffer(chunk)
+        ? chunk
+        : typeof chunk === "string"
+          ? Buffer.from(chunk, "utf8")
+          : Buffer.from(String(chunk));
+      bytes += buf.byteLength;
+      if (bytes > MAX_BODY_BYTES) {
+        // Reject without destroying the socket: the caller writes the 413 first,
+        // and res.end() closes a connection whose request was never fully
+        // consumed — so the client still receives the intended response.
         settle(() => reject(new BodySizeError()));
-        try {
-          stream.destroy?.(); // stop buffering a runaway payload
-        } catch {
-          // Best effort; the rejection already bounds memory.
-        }
+        return;
       }
+      chunks.push(buf);
     });
-    stream.on("end", () => settle(() => resolve(body)));
+    stream.on("end", () =>
+      settle(() => resolve(Buffer.concat(chunks).toString("utf8"))),
+    );
     stream.on("error", (err: unknown) =>
       settle(() => reject(err instanceof Error ? err : new Error(String(err)))),
     );
@@ -833,5 +853,8 @@ function respondReadError(res: ResponseLike, e: unknown): void {
   if (e instanceof BodySizeError) json(res, 413, { error: e.message });
   else json(res, 500, { error: `failed to read request body: ${errorText(e) ?? String(e)}` });
 }
+
+/** Exported for tests: the byte-bounded body reader and its error type. */
+export { readBody, BodySizeError };
 
 export default { name, inject, apply };

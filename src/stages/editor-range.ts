@@ -35,6 +35,10 @@ export const editorRangeStage: PreStage = {
       toolName === "str_replace_editor",
     );
     if (JSON.stringify(normalized) === JSON.stringify(args)) return undefined;
-    return { args: normalized, changes: ["Normalized editor path/range"] };
+    return {
+      args: normalized,
+      changes: ["Normalized editor path/range"],
+      category: "RANGE_CLAMP",
+    };
   },
 };

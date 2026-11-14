@@ -199,8 +199,9 @@ function relaxedJsonParse(raw: string): Record<string, unknown> | null {
     while (i < n && " \t\r\n".includes(raw[i]!)) i++;
   }
 
-  /** Read a double- or single-quoted string. Returns [value, terminated]. */
+  /** Read a double- or single-quoted string; `i` starts on the opening quote. */
   function readString(quote: string): [string, boolean] {
+    i++; // Consume the opening quote before scanning for its close.
     let out = "";
     while (i < n) {
       const ch = raw[i]!;
@@ -694,6 +695,7 @@ export function parseToolCallsFromText(
     if (isExecutionClassName(m[1] ?? "")) continue; // G5
     if (inSpan(openBrace, tSpans)) continue; // G1
     if (inSpan(m.index, cSpans)) continue; // G2
+    if (inSpan(m.index, tmSpans)) continue; // G3
     if (coveredAt(m.index, regions)) continue; // G4
     const parsed = tryParseJsonAt(text, openBrace);
     if (!parsed) continue;

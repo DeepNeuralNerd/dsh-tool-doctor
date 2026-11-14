@@ -83,6 +83,38 @@ describe("runPipeline — pre-dispatch repair", () => {
     const outcome = await runPipeline(exec, async () => textResult("ran"), CONFIG, SESSION);
     expect(outcome.wasHealed).toBe(false);
   });
+
+  it("claims READ_ARGS when the offset correction fires", async () => {
+    const exec = makeExec({ name: "read", arguments: { file_path: "/a.txt", offset: 0 } });
+    const outcome = await runPipeline(exec, async () => textResult("body"), CONFIG, SESSION);
+    expect(outcome.wasHealed).toBe(true);
+    expect(outcome.category).toBe("READ_ARGS");
+    expect((exec.arguments as Record<string, unknown>).offset).toBe(1);
+  });
+
+  it("claims PATH_QUOTES when a wrapped absolute path is unwrapped", async () => {
+    const exec = makeExec({ name: "read", arguments: { file_path: "\"C:\\dir\\f.txt\"" } });
+    const outcome = await runPipeline(exec, async () => textResult("body"), CONFIG, SESSION);
+    expect(outcome.wasHealed).toBe(true);
+    expect(outcome.category).toBe("PATH_QUOTES");
+    expect((exec.arguments as Record<string, unknown>).file_path).toBe("C:\\dir\\f.txt");
+  });
+
+  it("demotes an unrelated failure after a claimed pre-fix (honest attribution)", async () => {
+    const exec = makeExec({ name: "read", arguments: { file_path: "/a.txt", offset: 0 } });
+    const outcome = await runPipeline(
+      exec,
+      async () => ({
+        isError: true,
+        error: Object.assign(new Error("file not found"), { code: "FS_NOT_FOUND" }),
+      }),
+      CONFIG,
+      SESSION,
+    );
+    expect(outcome.wasHealed).toBe(false);
+    expect(outcome.category).toBe("PASSTHROUGH");
+    expect(outcome.changes.join(" ")).toMatch(/did not address final error/i);
+  });
 });
 
 describe("runPipeline — post-dispatch recovery", () => {

@@ -296,7 +296,9 @@ export async function runPipeline(
           result = appendResultHint(result, collapsedCallHint(exec.name));
         } else if (
           exec.name === "run_code" &&
-          session.codeLanguage() !== "python" &&
+          // Same language gate as the run_code stage: a Python runtime never
+          // sees a TypeScript syntax hint, whatever casing the host reports.
+          !(session.codeLanguage() ?? "").toLowerCase().startsWith("python") &&
           category !== "RUN_CODE_SYNTAX" &&
           // The syntax-failure pattern lives with the RUN_CODE_SYNTAX metadata —
           // one source of truth for what a parse failure looks like.
