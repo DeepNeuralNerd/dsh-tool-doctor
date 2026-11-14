@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <defs>
+    <linearGradient id="dsh_sp_bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1B2A38"/>
+      <stop offset="1" stop-color="#0F172A"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="640" fill="url(#dsh_sp_bg)"/>
+
+  <g transform="translate(96 212) scale(5.8)">
+    <path d="M 14.63 9.87 L 15.72 9.5 L 15.18 7.47 L 20.82 7.47 L 20.28 9.5 L 21.37 9.87 L 22.4 10.38 L 23.45 8.56 L 27.44 12.55 L 25.62 13.6 L 26.13 14.63 L 26.5 15.72 L 28.53 15.18 L 28.53 20.82 L 26.5 20.28 L 26.13 21.37 L 25.62 22.4 L 27.44 23.45 L 23.45 27.44 L 22.4 25.62 L 21.37 26.13 L 20.28 26.5 L 20.82 28.53 L 15.18 28.53 L 15.72 26.5 L 14.63 26.13 L 13.6 25.62 L 12.55 27.44 L 8.56 23.45 L 10.38 22.4 L 9.87 21.37 L 9.5 20.28 L 7.47 20.82 L 7.47 15.18 L 9.5 15.72 L 9.87 14.63 L 10.38 13.6 L 8.56 12.55 L 12.55 8.56 L 13.6 10.38 Z M 23.4 18 A 5.4 5.4 0 1 0 12.6 18 A 5.4 5.4 0 1 0 23.4 18 Z" fill="#3E9EA0" fill-rule="evenodd"/>
+    <path d="M 8.1 18 H 13.1 L 15.2 14.6 L 18.1 21.4 L 20.4 16.4 L 22.1 18 H 27.9" fill="none" stroke="#8ED8DC" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <text x="360" y="272" font-family="Segoe UI, Arial, sans-serif" font-size="76" font-weight="700" fill="#E8F1F2">Tool doctor</text>
+  <text x="362" y="336" font-family="Segoe UI, Arial, sans-serif" font-size="35" font-weight="600" fill="#8FBFC2">Fewer failed tool calls. Less backtracking.</text>
+  <text x="362" y="398" font-family="Segoe UI, Arial, sans-serif" font-size="25" fill="#8296A8">Self-repairing tool calls for DeepSeek Harness — every fix shown, local only.</text>
+
+  <g>
+    <circle cx="378" cy="470" r="15" fill="none" stroke="#C2574F" stroke-width="3"/>
+    <path d="M 372.5 464.5 L 383.5 475.5 M 383.5 464.5 L 372.5 475.5" stroke="#C2574F" stroke-width="3" stroke-linecap="round"/>
+    <path d="M 410 470 H 448" stroke="#3E9EA0" stroke-width="3.5" stroke-linecap="round"/>
+    <path d="M 442 463 L 452 470 L 442 477" fill="none" stroke="#3E9EA0" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="486" cy="470" r="15" fill="none" stroke="#3E8E6A" stroke-width="3"/>
+    <path d="M 479.5 470 L 484 475 L 493 465" fill="none" stroke="#3E8E6A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <g fill="#54687C">
+      <circle cx="545" cy="462" r="3.5"/><rect x="556" y="459" width="120" height="6" rx="3"/>
+      <circle cx="545" cy="478" r="3.5"/><rect x="556" y="475" width="86" height="6" rx="3"/>
+    </g>
+  </g>
+</svg>

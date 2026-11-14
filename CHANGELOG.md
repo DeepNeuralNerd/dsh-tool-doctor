@@ -8,7 +8,10 @@
   `meta.detail`), single-image detail document `docs/DETAIL.md`, `icon.svg`
   (gear-ring + pulse, hollow center, theme-safe) and `docs/preview.svg`
   (fail→heal story, text-free), both drawn to the artwork spec by the
-  reviewer model. Manifest wires `./locale/*.json`, `./icon`, top-level
+  reviewer model. Repo identity: `docs/social-preview.svg` (1280×640 banner,
+  same gear-pulse identity + headline) with rendered `social-preview.png` —
+  GitHub exposes no upload API for social previews, so the PNG awaits its
+  30-second Settings → Social preview placement. Manifest wires `./locale/*.json`, `./icon`, top-level
   `icon`, and ships README/LICENSE/docs/locale/icon in `files`; package and
   patch descriptions rewritten to match verified behavior (route methods,
   guidance reset-on-restart, local storage, estimated token savings — all
