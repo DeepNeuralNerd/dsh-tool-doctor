@@ -161,6 +161,13 @@ export interface DoctorState {
   error: { source: DoctorErrorSource; detail: string } | null;
   /** When the stats snapshot last came from the host; null after reset or before any load. */
   lastUpdated: number | null;
+  /**
+   * The last stats refresh failed; the stats shown are retained data. Its own
+   * flag because `error` is one shared transient slot: a config or guidance
+   * request succeeding right after would clear a stats failure the stats
+   * never recovered from. Only a successful stats load (or reset) clears it.
+   */
+  statsStale: boolean;
 }
 
 const API_BASE = "/plugin-api/tool-doctor";
@@ -367,6 +374,7 @@ export class DoctorStore {
       error: null,
       // A persisted snapshot's age is unknown — say nothing until a load lands.
       lastUpdated: null,
+      statsStale: false,
     };
   }
 
@@ -451,10 +459,10 @@ export class DoctorStore {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const stats = coerceStats(await res.json());
       if (!stats) throw new Error("malformed payload");
-      this.patch({ stats, status: "ready", error: null, lastUpdated: Date.now() });
+      this.patch({ stats, status: "ready", error: null, lastUpdated: Date.now(), statsStale: false });
       persist(stats);
     } catch (err) {
-      this.patch({ error: { source: "stats", detail: describeError(err) } });
+      this.patch({ error: { source: "stats", detail: describeError(err) }, statsStale: true });
     }
   };
 
@@ -501,6 +509,7 @@ export class DoctorStore {
       candidates: null,
       error: null,
       lastUpdated: null,
+      statsStale: false,
     });
     persist(cleared);
   };

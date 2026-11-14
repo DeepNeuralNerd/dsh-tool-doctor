@@ -49,6 +49,7 @@ function state(over: Partial<DoctorState>): DoctorState {
     guidanceLoading: false,
     error: null,
     lastUpdated: null,
+    statsStale: false,
     ...over,
   };
 }
@@ -222,7 +223,10 @@ describe("snapshot freshness", () => {
       state({
         stats: { ...createEmptyStats(), totalIntercepted: 3, healedSuccess: 3 },
         lastUpdated: Date.now() - 60_000,
-        error: { source: "stats", detail: "HTTP 500" },
+        statsStale: true,
+        // The transient error slot is empty — freshness rides its own flag,
+        // so a later config/guidance success cannot erase the stale claim.
+        error: null,
       }),
     );
     // Headline: the honest stale claim, not the last-known healthy one…

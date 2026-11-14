@@ -203,3 +203,46 @@ describe("DoctorStore polling", () => {
     expect(store.getSnapshot().candidates?.[0]?.count).toBe(1002);
   });
 });
+
+describe("stats freshness", () => {
+  it("survives a later config success clearing the shared error", async () => {
+    const store = new DoctorStore();
+
+    // A stats refresh fails: freshness drops, retained data is what we show.
+    const failing = store.loadStats();
+    for (const d of stub.deferreds.splice(0)) d.resolve({ ok: false, status: 500 });
+    await failing;
+    expect(store.getSnapshot().statsStale).toBe(true);
+    expect(store.getSnapshot().error?.source).toBe("stats");
+
+    // A config request succeeds alongside — it clears the shared error slot,
+    // but must NOT restore freshness the stats never earned back.
+    const config = store.getConfig();
+    for (const d of stub.deferreds.splice(0)) {
+      d.resolve({ ok: true, json: async () => ({ shadowMode: true }) });
+    }
+    await config;
+    expect(store.getSnapshot().error).toBeNull();
+    expect(store.getSnapshot().statsStale).toBe(true);
+
+    // Only a successful stats load clears it.
+    const ok = store.loadStats();
+    for (const d of stub.deferreds.splice(0)) d.resolve(responseFor(d.path as string));
+    await ok;
+    expect(store.getSnapshot().statsStale).toBe(false);
+    expect(store.getSnapshot().lastUpdated).toBeTypeOf("number");
+  });
+
+  it("a reset restores freshness on the empty slate", async () => {
+    const store = new DoctorStore();
+    const failing = store.loadStats();
+    for (const d of stub.deferreds.splice(0)) d.resolve({ ok: false, status: 500 });
+    await failing;
+    expect(store.getSnapshot().statsStale).toBe(true);
+    const reset = store.reset();
+    for (const d of stub.deferreds.splice(0)) d.resolve({ ok: true, json: async () => ({}) });
+    await reset;
+    expect(store.getSnapshot().statsStale).toBe(false);
+    expect(store.getSnapshot().lastUpdated).toBeNull();
+  });
+});

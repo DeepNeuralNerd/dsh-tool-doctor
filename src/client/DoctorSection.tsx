@@ -548,6 +548,7 @@ function idleState(): DoctorState {
     guidanceLoading: false,
     error: null,
     lastUpdated: null,
+    statsStale: false,
   };
 }
 
@@ -618,9 +619,12 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
   const unrecoveredTotal = stats.healedFailed + stats.passThroughFailed;
 
   const basePanelState = derivePanelState(stats);
-  // A refresh that failed over retained data outranks any health claim:
-  // the card shows saved numbers as saved numbers.
-  const staleSnapshot = state.error?.source === "stats" && hasData;
+  // A refresh that failed over retained data outranks any health claim. This
+  // reads the store's OWN stats-freshness flag, not the shared transient
+  // error: a config/guidance request succeeding alongside a failed stats
+  // refresh would clear that error slot, flipping the card back to
+  // "Working normally" without any successful stats load.
+  const staleSnapshot = state.statsStale && hasData;
   const panelState: PanelState = staleSnapshot ? "stale" : basePanelState;
   const statusReason = staleSnapshot
     ? t("statusStaleReason")

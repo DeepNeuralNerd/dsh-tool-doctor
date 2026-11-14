@@ -2,6 +2,18 @@
 
 ## Unreleased (2026-11-14)
 
+- **Stats freshness got its own flag.** The stale card keyed on
+  `state.error.source === "stats"`, but `error` is one shared transient
+  slot: a config or guidance request completing successfully right after a
+  failed stats refresh (both run alongside it, and both patch `error: null`
+  on success) erased the failure and flipped the card back to "Working
+  normally" without a single successful stats load. The store now tracks
+  `statsStale` itself — set only when a stats load fails, cleared only by a
+  successful stats load or reset — and the card reads that. Two store tests
+  pin the scenario (stats fails → config succeeds: error slot empties, the
+  stale claim stands → stats succeeds: recovered) and the rendered test now
+  seeds `statsStale` with an empty error slot. 403 tests green.
+
 - **Design-pass corrections: the status never overstates what it knows.**
   (1) A snapshot the API could not refresh no longer claims health: the card
   switches to an amber "Showing saved data" state (reason + the retained
