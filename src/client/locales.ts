@@ -1,0 +1,166 @@
+/**
+ * Localization strings for the tool-doctor client UI.
+ *
+ * Every user-visible string in the dashboard resolves through this dictionary;
+ * `en` is the fallback voice and the only locale shipped with the plugin. The
+ * host may register other locales under the same namespace — the section's
+ * translator falls back to these strings key by key.
+ *
+ * @module dsh-tool-doctor/client/locales
+ */
+
+export const en = {
+  nav: "Tool Doctor",
+  title: "Tool Doctor — call diagnostics & healing dashboard",
+  subtitle:
+    "Inspect intercepted tool calls, review repairs and failures, and tune the healing rules.",
+
+  refresh: "Refresh",
+  autoRefresh: "Auto-refresh (5s)",
+  clear: "Clear records",
+  apiErrorStats: "Could not load stats from the plugin API — showing last saved data.",
+  apiErrorReset: "Reset request failed — data was kept as-is.",
+  apiErrorConfig: "Could not reach the config endpoint — toggles may be stale.",
+  apiErrorGuidance: "Could not reach the guidance endpoint.",
+
+  // Tabs
+  tabLive: "Live",
+  tabAnalytics: "Analytics",
+  tabErrors: "Errors",
+  tabRules: "Rules",
+
+  // KPI hero row
+  kpiTotal: "Intercepted calls",
+  kpiTotalDesc: "Cumulative tool dispatches captured by the doctor.",
+  kpiRate: "Healing success rate",
+  kpiRateDesc: "Share of repair attempts that ended in a successful call.",
+  kpiHealed: "Healed calls",
+  kpiHealedFailedSuffix: "failed repairs",
+  kpiSavedTokens: "Estimated tokens saved",
+  kpiSavedTokensDesc:
+    "Metered input tokens avoided across successful repairs (estimate).",
+  estimateBadge: "Estimate",
+  kpiUnrecovered: "Unrecovered errors",
+  kpiUnrecoveredDesc:
+    "Failed calls that reached the host without a repair attempt.",
+
+  // Status labels
+  statusHealed: "Healed",
+  statusFailed: "Failed",
+  statusPassthrough: "Passed through",
+
+  // Live table & filters
+  filterAll: "All events",
+  filterHealed: "Healed only",
+  filterFailed: "Failed only",
+  searchPlaceholder: "Search tool, category, or args…",
+  colTime: "Time",
+  colTool: "Tool",
+  colCategory: "Category",
+  colStatus: "Status",
+  noData: "No records yet",
+  noDataDesc:
+    "When the agent calls tools, interception and repair details appear here in real time.",
+
+  // Diff view
+  beforeInput: "Original args (before)",
+  afterInput: "Repaired args (after)",
+  afterUnchanged: "(unchanged)",
+  changeSummary: "Changes",
+  diffDetails: "Show diff",
+  hideDetails: "Hide diff",
+  errorDetail: "Error",
+
+  // Analytics
+  healthScoreTitle: "Tool-call health",
+  healthGood: "Excellent — most anomalies are absorbed by the healing rules.",
+  healthFair:
+    "Good — occasional uncaught errors; review the model's prompt conventions.",
+  healthWarn:
+    "Needs attention — many unrecovered anomalies; check the environment and local dependencies.",
+  toolRankTitle: "Intercepted calls by tool",
+  categoryRankTitle: "Events by repair category",
+  failuresToolTitle: "Failed calls by tool",
+  failuresCategoryTitle: "Failures by category",
+  rankEmpty: "No data yet",
+
+  // Errors tab
+  errorsIntro:
+    "Unrecovered tool-call errors, grouped into recurring patterns. Each candidate is judged against the existing healing rules.",
+  errorsPatternsTitle: "Error patterns",
+  errorsUnrecoveredTitle: "Unrecovered failures",
+  errorsNewTitle: "New-rule candidates",
+  errorsEmptyTitle: "No unrecovered errors",
+  errorsEmptyDesc:
+    "Every recorded failure was repaired or has not recurred yet. New patterns will appear here for rule evaluation.",
+  verdictAttempted: "Rule attempted, failed",
+  verdictGap: "Coverage gap",
+  verdictNew: "New rule candidate",
+  verdictAttemptedText:
+    "Healing rule {rule} attempted this and the call still failed — refine that rule.",
+  verdictGapText:
+    "Matches healing rule {rule} territory, but no rule ran — check why it was skipped.",
+  verdictNewText:
+    "No existing healing rule covers this pattern — candidate for a new rule.",
+  errorsSample: "Latest failing call",
+  errorsShowSample: "Evidence",
+  errorsHideSample: "Hide evidence",
+  firstSeen: "First seen",
+  lastSeen: "Last seen",
+
+  // Rules tab
+  rulesTitle: "Healing rules & diagnostics",
+  rule1Title: "run_code argument repair",
+  rule1Desc:
+    "Fixes run_code schema mismatches (command→code, missing description — including descriptions inside embedded tool() calls), strips Markdown fences, and heals common syntax slips.",
+  rule2Title: "Unknown-tool bridge",
+  rule2Desc:
+    "Re-dispatches UNKNOWN_TOOL results as nested host calls when the target tool is registered in scope; direct calls rejected early by the host cannot be intercepted.",
+  rule3Title: "Range & path normalization",
+  rule3Desc:
+    "Clamps out-of-bounds ranges (view_range, read offset past EOF), resolves session-relative paths against the working directory, drops out-of-workspace sourcePaths, and unwraps quoted paths.",
+  rule4Title: "Observe-then-retry",
+  rule4Desc:
+    "After an edit/write hits FS_NOT_OBSERVED or FS_STALE_VERSION, reads the target once and retries through the host dispatcher; anchor-lost errors only refresh observation state without a blind retry.",
+  rule5Title: "Prompt guidance injection",
+  rule5Desc:
+    "Injects concise best-practice guidance into the model's system context to reduce tool-call errors at the source (see editor below).",
+  rule6Title: "Failure hints",
+  rule6Desc:
+    "Appends an actionable recovery hint to otherwise-unrecovered error results; the original error text is preserved so the model can self-correct in the same turn.",
+  rule7Title: "In-text tool-call promotion",
+  rule7Desc:
+    "Promotes recognized tool-call markup written inside streamed replies into real structured tool blocks, leaving markers inside code fences and think blocks untouched.",
+  rule8Title: "Passthrough trace persistence",
+  rule8Desc:
+    "Also persists successful untouched calls in the detailed JSONL trace; aggregate counters are unaffected either way.",
+  statusActive: "On",
+  statusInactive: "Off",
+  ruleTagActiveHint: "On — click to turn this rule off",
+  ruleTagInactiveHint: "Off — click to turn this rule on",
+  ruleToggleFailed: "Could not change the rule",
+  ruleHealthTitle: "Rule health by category",
+  ruleHealthTotal: "events",
+  ruleHealthFailed: "failed",
+
+  // Guidance editor
+  guidanceTitle: "Model prompt guidance",
+  guidanceDesc:
+    "Injected into the model's system context every turn. Changes apply immediately, no restart needed.",
+  guidancePlaceholder: "Enter prompt content…",
+  guidanceSaveBtn: "Save changes",
+  guidanceDefaultBtn: "Restore default",
+  guidanceSaveSuccess: "Guidance updated",
+  guidanceSaveError: "Save failed — the host rejected or missed the request.",
+  guidanceResetSuccess: "Factory default restored",
+  guidanceDirty: "Unsaved changes",
+  guidanceLines: "lines",
+  guidanceChars: "chars",
+  guidanceDefaultTitle: "Factory default (read-only)",
+  guidanceEmpty: "(empty)",
+
+  times: "×",
+};
+
+/** Every translatable key in the dashboard. */
+export type NormalizerKey = keyof typeof en;
