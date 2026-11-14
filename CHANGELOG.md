@@ -17,6 +17,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- **README "The rules" table.** Every dashboard rule documented publicly
+  with what it does and the justification that admits it — published
+  failure class, deterministic host contract, or standard — linking the
+  research corpus and review record. Titles and flags match the dashboard.
+
 - **`$ref`-declared properties get the narrowest coercion (rule 9 family 1).**
   A vLLM serving-stack report reproduces nested objects arriving as JSON
   strings exactly when the property uses `$ref` (the inline equivalent
