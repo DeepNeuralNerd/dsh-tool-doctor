@@ -2,11 +2,11 @@
  * Path-shape normalization for the PATH_SEPARATORS rule (rule 3, path family).
  *
  * Two lossless rewrites, no I/O:
- *  - Tilde expansion: a leading `~` (or `~/` / `~\`) expands to os.homedir(),
- *    with the remainder converted to the host's native separators — but only
- *    when the home's style matches the session world's style. A POSIX-style
- *    session whose cwd is unknown to this process keeps its `~` untouched:
- *    the plugin machine's home would be the WRONG answer.
+ *  - Tilde expansion: a leading `~` (or `~/` / `~\`) expands to os.homedir()
+ *    (remainder in native separators) — but only when the session cwd IS or
+ *    sits UNDER that home, positive evidence the session shares it. Any
+ *    other session world (remote same-OS included, cwd unknown included)
+ *    keeps its `~`: the plugin machine's home would be the wrong answer.
  *  - Separator normalization: on a POSIX session only, backslashes in a path
  *    value are rewritten to "/" (backslash drift from a Windows-trained model
  *    is the common case; POSIX filenames virtually never contain one).
@@ -47,15 +47,32 @@ function nativeSeparators(rest: string, isWindowsHost: boolean): string {
   return isWindowsHost ? rest.replace(/\//g, "\\") : rest.replace(/\\/g, "/");
 }
 
+/** Is `candidate` equal to, or below, `base` as a path (separator boundary, not a string prefix)? */
+function pathWithin(base: string, candidate: string, caseInsensitive: boolean): boolean {
+  let b = base.replace(/[\\/]+$/, "");
+  let c = candidate;
+  if (caseInsensitive) {
+    b = b.toLowerCase().replace(/\//g, "\\");
+    c = c.toLowerCase().replace(/\//g, "\\");
+  }
+  if (c === b) return true;
+  if (!c.startsWith(b)) return false;
+  const next = c[b.length];
+  return next === "\\" || next === "/";
+}
+
 /**
- * This process's home directory, but only when it can be TRUSTED for the
- * session world: a Windows harness driving a POSIX (remote/container) session
- * has a home the session would never resolve `~` to. The session's style is
- * the test — same style means same machine as far as we can tell; a mismatch
- * means the session's home is unknown and `~` must stay untouched (the tool
- * itself, running in the session world, will resolve or reject it honestly).
+ * The home directory to expand `~` against — but only on POSITIVE evidence
+ * that the session can resolve it: the session cwd must be the home itself
+ * or sit below it. A same-OS REMOTE session (cwd `/home/other/work`, or on
+ * another machine entirely) shares nothing with this process's home, so the
+ * session's home is unknown and `~` must stay untouched — the tool, running
+ * in the session world, resolves or rejects it honestly. Matching path
+ * STYLE was the first bar (cross-platform case); living under the home is
+ * the evidence that actually implies a shared home directory.
  */
-function trustedHome(isWindowsHost: boolean): string | undefined {
+function trustedHome(cwd: string | undefined, isWindowsHost: boolean): string | undefined {
+  if (cwd === undefined || cwd.length === 0) return undefined;
   let home: string;
   try {
     home = os.homedir();
@@ -64,7 +81,10 @@ function trustedHome(isWindowsHost: boolean): string | undefined {
   }
   if (typeof home !== "string" || home.length === 0) return undefined;
   const homeIsWindows = /^[a-zA-Z]:[\\/]/.test(home) || home.startsWith("\\\\");
-  return homeIsWindows === isWindowsHost ? home : undefined;
+  // Style mismatch can never sit within the home, but check it first so a
+  // POSIX cwd is never prefix-compared against a Windows home.
+  if (homeIsWindows !== isWindowsHost) return undefined;
+  return pathWithin(home, cwd, homeIsWindows) ? home : undefined;
 }
 
 /**
@@ -96,7 +116,7 @@ export function normalizePathShapes(
     if (out === "~" || out.startsWith("~/") || out.startsWith("~\\")) {
       // Tilde expansion — only over a home trusted for this session world
       // (see trustedHome); otherwise the value passes through unchanged.
-      const home = trustedHome(isWindowsHost);
+      const home = trustedHome(cwd, isWindowsHost);
       if (home !== undefined) {
         const rest = nativeSeparators(out.slice(1), isWindowsHost);
         out = `${home}${rest}`;

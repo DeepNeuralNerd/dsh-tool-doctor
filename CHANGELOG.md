@@ -2,6 +2,14 @@
 
 ## Unreleased (2026-11-14)
 
+- **Reviewer round (3rd): tilde home-trust strengthened from style-match to
+  containment.** Matching path styles only proved the same OS, not a shared
+  home — a same-OS remote session could still have `~` expand to the plugin
+  machine's directory. `~` now expands only when the session cwd IS the
+  known home or sits UNDER it (separator-boundary check, not a string
+  prefix); every other world — same-OS remote, cross-platform, cwd unknown
+  — leaves `~` untouched for the tool to resolve honestly.
+
 - **Reviewer round (2nd): five correctness fixes, each with a pinning
   regression test.** (1) Trailing-comma stripping in the argument-JSON
   recovery is now a string-aware scanner — `{"text":"x,}","count":1,}`

@@ -3,41 +3,63 @@ import os from "node:os";
 import { normalizePathShapes } from "../src/repair/path-normalize.ts";
 
 /** Does THIS machine's home use drive-letter/backslash style? */
-const homeIsWindows = /^[a-zA-Z]:[\\/]/.test(os.homedir()) || os.homedir().startsWith("\\\\");
+const home = os.homedir();
+const homeIsWindows = /^[a-zA-Z]:[\\/]/.test(home) || home.startsWith("\\\\");
+const homeRoot = home.replace(/[\\/]+$/, "");
+const sep = homeIsWindows ? "\\" : "/";
 
 describe("normalizePathShapes", () => {
-  // A session cwd whose style MATCHES this machine's home (expansion allowed)
-  // and one with the foreign style (home unknown → ~ must survive untouched).
-  const matchingCwd = homeIsWindows ? "C:\\work" : "/home/user/workspace";
-  const foreignCwd = homeIsWindows ? "/remote/work" : "C:\\work";
+  // A cwd INSIDE this machine's home — the only world where ~ expansion is
+  // known-safe. Everything else must leave ~ untouched.
+  const underHomeCwd = `${homeRoot}${sep}project`;
+  // Same path style, different (or unknown) home: a same-OS remote session
+  // (Windows: another volume; POSIX: another user) — must NOT expand.
+  const sameStyleRemoteCwd = homeIsWindows ? "D:\\work" : "/home/someone-else/work";
+  const foreignStyleCwd = homeIsWindows ? "/remote/work" : "C:\\work";
 
-  it("expands tilde ~/notes.md when home style matches the session world", () => {
-    const result = normalizePathShapes("edit", { path: "~/notes.md" }, matchingCwd);
+  it("expands tilde ~/notes.md when the session cwd sits under the home", () => {
+    const result = normalizePathShapes("edit", { path: "~/notes.md" }, underHomeCwd);
     expect(result).toBeDefined();
     expect(result?.changes).toContain("expanded ~ to home directory");
-    const rest = homeIsWindows ? "\\notes.md" : "/notes.md";
-    expect((result!.args as Record<string, unknown>).path).toBe(`${os.homedir()}${rest}`);
+    expect((result!.args as Record<string, unknown>).path).toBe(`${home}${sep}notes.md`);
   });
 
-  it("expands a bare ~ when home style matches", () => {
-    const result = normalizePathShapes("edit", { path: "~" }, matchingCwd);
-    expect((result!.args as Record<string, unknown>).path).toBe(os.homedir());
+  it("expands a bare ~ when the session cwd IS the home", () => {
+    const result = normalizePathShapes("edit", { path: "~" }, homeRoot);
+    expect((result!.args as Record<string, unknown>).path).toBe(home);
   });
 
-  it("leaves ~ untouched when the session world has the foreign style", () => {
-    // Reviewer case: a Windows plugin driving a POSIX session must NOT
-    // rewrite ~/notes into C:\Users/<plugin-user>/notes.
-    expect(normalizePathShapes("edit", { path: "~/notes.md" }, foreignCwd)).toBeUndefined();
+  it("leaves ~ untouched for a same-style remote session (different home)", () => {
+    // Reviewer case: matching style is not evidence of a shared home.
+    expect(normalizePathShapes("edit", { path: "~/notes.md" }, sameStyleRemoteCwd)).toBeUndefined();
+  });
+
+  it("leaves ~ untouched for the foreign path style", () => {
+    expect(normalizePathShapes("edit", { path: "~/notes.md" }, foreignStyleCwd)).toBeUndefined();
+  });
+
+  it("leaves ~ untouched when the cwd is unknown", () => {
+    expect(normalizePathShapes("edit", { path: "~/notes.md" }, undefined)).toBeUndefined();
+  });
+
+  it("requires a separator boundary, not just a string prefix", () => {
+    // cwd "/home/user-project" starts with home "/home/user" textually,
+    // but is NOT inside the home — expansion would be a guess.
+    expect(
+      normalizePathShapes("edit", { path: "~/notes.md" }, `${homeRoot}${sep}elsewhere`),
+    ).toBeDefined(); // sanity: a real subdir still expands
+    expect(
+      normalizePathShapes("edit", { path: "~/notes.md" }, `${homeRoot}-extra`),
+    ).toBeUndefined();
   });
 
   it("does NOT rewrite backslash path when cwd hints Windows", () => {
-    // When cwd includes backslashes (Windows hint), separators are never rewritten.
     const result = normalizePathShapes("edit", { path: "C:\\a\\b" }, "C:\\work");
     expect(result).toBeUndefined(); // No changes expected on Windows-style cwd
   });
 
   it("rewrites backslash posix path with cwd hinting POSIX", () => {
-    // On POSIX (cwd without backslashes), a single backslash in the value gets normalized.
+    // Separator normalization is independent of the home-trust rule.
     const result = normalizePathShapes("edit", { path: "/home/u\\dir\\f.txt" }, "/home/user");
     expect(result).toBeDefined();
     expect(result?.changes).toContain("normalized path separators to host style");
@@ -45,13 +67,13 @@ describe("normalizePathShapes", () => {
   });
 
   it("returns undefined for already-clean path", () => {
-    const result = normalizePathShapes("edit", { path: "/clean/path/file.txt" }, matchingCwd);
-    expect(result).toBeUndefined(); // No changes → no-op
+    const result = normalizePathShapes("edit", { path: "/clean/path/file.txt" }, underHomeCwd);
+    expect(result).toBeUndefined();
   });
 
   it("leaves non-string path value untouched", () => {
-    const result = normalizePathShapes("edit", { path: 123 as unknown as string }, matchingCwd);
-    expect(result).toBeUndefined(); // Skip non-string values
+    const result = normalizePathShapes("edit", { path: 123 as unknown as string }, underHomeCwd);
+    expect(result).toBeUndefined();
   });
 
   it("handles object args with two path keys where only one changes", () => {
@@ -61,13 +83,11 @@ describe("normalizePathShapes", () => {
         file_path: "~/file.txt",
         TargetFile: "/absolute/path/file.md",
       },
-      matchingCwd,
+      underHomeCwd,
     );
     expect(result).toBeDefined();
-    expect(result?.changes.length).toBeGreaterThanOrEqual(1);
-    // Only the tilde path should change.
     const args = result!.args as Record<string, unknown>;
-    expect(args.file_path).toContain(os.homedir());
+    expect(args.file_path).toContain(home);
     expect(args.TargetFile).toBe("/absolute/path/file.md"); // unchanged
   });
 });
