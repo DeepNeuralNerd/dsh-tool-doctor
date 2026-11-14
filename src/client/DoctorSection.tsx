@@ -336,24 +336,34 @@ function KpiCard(props: {
 
 /**
  * Small time trend of ACTUAL outcomes from the recorded events: one stacked
- * mini-bar per time bucket, repaired under failed. Shadow matches are
- * excluded — nothing was dispatched for them, so they have no outcome.
+ * mini-bar per time bucket, repaired under failed. Bars are filled BY
+ * OUTCOME, not by shadow flag: shadow mode still dispatches the original
+ * call, so a shadow failure is a real failure — it just can never count as
+ * a repair (and a shadow success, having no dispatched repair, is not
+ * plotted at all).
  */
-function OutcomeTrend({ records, t }: { records: NormalizerRecord[]; t: TFn }): ReactElement {
+export function OutcomeTrend({ records, t }: { records: NormalizerRecord[]; t: TFn }): ReactElement {
   const BUCKETS = 14;
-  const actual = records.filter((r) => r.shadow !== true);
+  const isRepair = (r: NormalizerRecord): boolean =>
+    r.wasHealed && r.status === "success" && r.shadow !== true;
+  const counted = records.filter((r) => isRepair(r) || r.status === "failed");
   const buckets = Array.from({ length: BUCKETS }, () => ({ ok: 0, bad: 0 }));
   let from = Infinity;
   let to = 0;
-  for (const r of actual) {
+  for (const r of counted) {
     if (r.time < from) from = r.time;
     if (r.time > to) to = r.time;
   }
-  if (actual.length > 0 && to > from) {
-    for (const r of actual) {
-      const i = Math.min(BUCKETS - 1, Math.floor(((r.time - from) / (to - from)) * BUCKETS));
-      if (r.wasHealed && r.status === "success") buckets[i]!.ok += 1;
-      else if (r.status === "failed") buckets[i]!.bad += 1;
+  if (counted.length > 0) {
+    for (const r of counted) {
+      // A lone event — or one all calls share — goes into a single bucket;
+      // the trend must still show it.
+      const i =
+        to > from
+          ? Math.min(BUCKETS - 1, Math.floor(((r.time - from) / (to - from)) * BUCKETS))
+          : 0;
+      if (isRepair(r)) buckets[i]!.ok += 1;
+      else buckets[i]!.bad += 1;
     }
   }
   const max = Math.max(1, ...buckets.map((b) => b.ok + b.bad));
@@ -421,6 +431,16 @@ const ERROR_LINE: Record<DoctorErrorSource, NormalizerKey> = {
 
 function categoryLabel(category: string): string {
   return (CATEGORY_LABELS as Readonly<Record<string, string | undefined>>)[category] ?? category;
+}
+
+/**
+ * Stable, whitespace-free DOM id for a candidate's detail region. Candidate
+ * keys join tool and signature with a space, and `aria-controls` is a
+ * whitespace-separated token list — an unencoded key would make the button
+ * reference several (nonexistent) ids instead of its one panel.
+ */
+export function candidateDomId(key: string): string {
+  return `doctor-cand-${encodeURIComponent(key)}`;
 }
 
 function idleState(): DoctorState {
@@ -1049,7 +1069,7 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
                       type="button"
                       className={styles.candHead}
                       aria-expanded={open}
-                      aria-controls={`doctor-cand-${candidate.key}`}
+                      aria-controls={candidateDomId(candidate.key)}
                       onClick={() => toggleExpand(candKey)}
                     >
                       <div className={styles.candMetaCol}>
@@ -1068,7 +1088,7 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
                       </div>
                     </button>
                     {open && (
-                      <div id={`doctor-cand-${candidate.key}`} className={styles.candBody}>
+                      <div id={candidateDomId(candidate.key)} className={styles.candBody}>
                         <p className={styles.candVerdict}>{verdictSentence(candidate)}</p>
                         {candidate.fixable && candidate.proposedFix !== undefined ? (
                           <div className={styles.fixBlock}>

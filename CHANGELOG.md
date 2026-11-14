@@ -2,6 +2,19 @@
 
 ## Unreleased (2026-11-14)
 
+- **Round-6 corrections: trend counts by outcome, lone events, candidate
+  id.** (1) The Analytics trend no longer hides real failures during shadow
+  mode: bars are filled BY OUTCOME, so a shadow failure (the original call
+  really failed) lands in the failed bar, while a shadow match can still
+  never count as a repair. (2) A lone record — or several sharing one
+  timestamp — now renders its events in one bucket instead of an empty
+  trend chart. (3) Candidate DOM ids: `candidateDomId` percent-encodes the
+  tool+signature key, so `aria-controls` stays a single whitespace-free
+  id token instead of an accidental token list. All three are pinned by
+  new rendered-component tests (`tests/client-component.spec.tsx`,
+  react-dom/server through the real `DoctorSection`/`OutcomeTrend`, state
+  seeded via a fake controller snapshot).
+
 - **Visual pass on truthful numbers (reviewer layout brief).** Overview now
   has one prominent outcome card (actual repairs leading, with failed
   repairs and unrecovered failures as honest split stats and the rate meter)
