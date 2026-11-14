@@ -82,6 +82,20 @@ Everything else (S8, S9, S12, S13, S20) sits at agent/loop/provider level.
 
 Explicit non-starters from this corpus: enum case folding (already in type-coercion), semantic-drift fixes (S7), missing-required fills (S3), anything agent-loop (S8/S11), file-URI percent-decoding (no occurrence in this host's ledgers or candidate lists yet — keep watching, don't build).
 
+**Reviewer-pass addendum (2026-11-14; details in
+[REVIEW-recommendations-2026-11.md](REVIEW-recommendations-2026-11.md) §7).**
+C1/C2 were REVISED: successful parsing proves syntax, not intent — C1 is
+re-scoped to read-only/shadow use (a completed `content` field is still
+truncated), C2 requires a token-aware parser that preserves strings exactly. C3's
+deferral confirmed; C4's probe redesigned to gather real per-tool long-path
+errors. The pass contributed a NEW corpus class, RFC 8259 §4 duplicate JSON
+member names ("unpredictable interoperability behavior"; `JSON.parse` last-wins
+= silent target swap) — shipped the same day as an ambiguity guard in
+`repairArgsPayload` (six tests). Ledger semantics also corrected by the review:
+record only "rewritten call succeeded"; no counterfactual or counted round-trip
+claims until shadow-mode data exists; the breaker gates post-dispatch stages
+only (pre-dispatch rules are flag-gated).
+
 ## 6. Standing conclusions for the plugin's identity
 
 - S14 gives the architecture its justification sentence: constrained decoding under-constrains or over-constrains in the wild, and the paper's own remedy is "additional post-processing" — a runtime repair layer is the recommended production pattern, not a hack.
