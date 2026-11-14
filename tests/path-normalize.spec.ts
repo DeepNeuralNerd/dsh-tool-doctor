@@ -53,6 +53,40 @@ describe("normalizePathShapes", () => {
     ).toBeUndefined();
   });
 
+  // Reviewer round (4th): containment must run on the RESOLVED cwd, not the
+  // raw string — "." and ".." segments change which directory a cwd names.
+  describe("cwd containment resolves . and .. before checking", () => {
+    it("does NOT expand for a cwd whose .. segments escape the home", () => {
+      // Home C:\Users\Srini + cwd C:\Users\Srini\project\..\..\elsewhere
+      // resolves to C:\Users\elsewhere — outside the home.
+      const escapingCwd = `${homeRoot}${sep}project${sep}..${sep}..${sep}elsewhere`;
+      expect(normalizePathShapes("edit", { path: "~/notes.md" }, escapingCwd)).toBeUndefined();
+    });
+
+    it("expands when . segments keep the cwd under the home", () => {
+      const dottedCwd = `${homeRoot}${sep}.${sep}sub`;
+      const result = normalizePathShapes("edit", { path: "~/notes.md" }, dottedCwd);
+      expect(result).toBeDefined();
+      expect((result!.args as Record<string, unknown>).path).toBe(`${home}${sep}notes.md`);
+    });
+
+    it("expands when .. segments stay inside the home", () => {
+      const wobblingCwd = `${homeRoot}${sep}sub${sep}..${sep}sub2`; // resolves to home/sub2
+      expect(
+        normalizePathShapes("edit", { path: "~/notes.md" }, wobblingCwd),
+      ).toBeDefined();
+    });
+
+    it("clamps .. at the filesystem root instead of popping the root token", () => {
+      // More leading .. than there are directories: resolves to the root,
+      // which is not inside the home (home is never the root here).
+      const beyond = homeIsWindows
+        ? `${homeRoot}${sep}..${sep}..${sep}..${sep}..`
+        : `${homeRoot}/../../..`;
+      expect(normalizePathShapes("edit", { path: "~/notes.md" }, beyond)).toBeUndefined();
+    });
+  });
+
   it("does NOT rewrite backslash path when cwd hints Windows", () => {
     const result = normalizePathShapes("edit", { path: "C:\\a\\b" }, "C:\\work");
     expect(result).toBeUndefined(); // No changes expected on Windows-style cwd

@@ -47,29 +47,68 @@ function nativeSeparators(rest: string, isWindowsHost: boolean): string {
   return isWindowsHost ? rest.replace(/\//g, "\\") : rest.replace(/\\/g, "/");
 }
 
-/** Is `candidate` equal to, or below, `base` as a path (separator boundary, not a string prefix)? */
-function pathWithin(base: string, candidate: string, caseInsensitive: boolean): boolean {
-  let b = base.replace(/[\\/]+$/, "");
-  let c = candidate;
-  if (caseInsensitive) {
-    b = b.toLowerCase().replace(/\//g, "\\");
-    c = c.toLowerCase().replace(/\//g, "\\");
+/**
+ * Split a path into meaningful segments for comparison: separators unified
+ * (and case folded on Windows hosts), `.` dropped, `..` resolved against
+ * the accumulated segments. TEXT-level normalization only — no I/O, no
+ * symlink/junction resolution — and `..` never pops past the root (drive
+ * letter, POSIX `/`, UNC share), clamping at it exactly as path resolution
+ * does. Relative `..` with nothing to pop is kept, so a relative cwd can
+ * never claim containment.
+ */
+function normalizeSegments(path: string, caseInsensitive: boolean): string[] {
+  const unified = caseInsensitive ? path.replace(/\//g, "\\").toLowerCase() : path;
+  const parts = unified.split(/[\\/]+/);
+  const first = parts.find((p) => p !== "") ?? "";
+  // Segment tokens forming an unpoppable root: the drive letter (1 token)
+  // or a UNC server+share (2). The POSIX root "/" is not a segment token at
+  // all — its only job is marking the path rooted so leading ".." clamps.
+  const unc = caseInsensitive && unified.startsWith("\\\\");
+  const rooted = caseInsensitive
+    ? /^[a-z]:$/.test(first) || unc
+    : unified.startsWith("/");
+  const rootTokens = /^[a-z]:$/.test(first) ? 1 : unc ? 2 : 0;
+  const out: string[] = [];
+  for (const part of parts) {
+    if (part === "" || part === ".") continue;
+    if (part === "..") {
+      if (out.length > rootTokens && out[out.length - 1] !== "..") {
+        out.pop();
+      } else if (out.length <= rootTokens && !rooted) {
+        out.push("..");
+      }
+      // rooted and at/below the root tokens: clamped, like real resolution.
+      continue;
+    }
+    out.push(part);
   }
-  if (c === b) return true;
-  if (!c.startsWith(b)) return false;
-  const next = c[b.length];
-  return next === "\\" || next === "/";
+  return out;
+}
+
+/** Is `candidate` equal to, or below, `base` once both are segment-normalized? */
+function pathWithin(base: string, candidate: string, caseInsensitive: boolean): boolean {
+  const baseSegs = normalizeSegments(base, caseInsensitive);
+  const candSegs = normalizeSegments(candidate, caseInsensitive);
+  // A base containing unresolved ".." (a relative home) proves nothing.
+  if (baseSegs.includes("..") || baseSegs.length > candSegs.length) return false;
+  return baseSegs.every((seg, i) => candSegs[i] === seg);
 }
 
 /**
  * The home directory to expand `~` against — but only on POSITIVE evidence
- * that the session can resolve it: the session cwd must be the home itself
- * or sit below it. A same-OS REMOTE session (cwd `/home/other/work`, or on
- * another machine entirely) shares nothing with this process's home, so the
- * session's home is unknown and `~` must stay untouched — the tool, running
- * in the session world, resolves or rejects it honestly. Matching path
- * STYLE was the first bar (cross-platform case); living under the home is
- * the evidence that actually implies a shared home directory.
+ * that the session can resolve it: the session cwd, after `.`/`..`
+ * collapsing, must BE the home or sit below it. A same-OS REMOTE session
+ * (cwd `/home/other/work`, or on another machine entirely) shares nothing
+ * with this process's home, so the session's home is unknown and `~` must
+ * stay untouched — the tool, running in the session world, resolves or
+ * rejects it honestly.
+ *
+ * Honest limits of the evidence: containment is text-level (a symlinked cwd
+ * could point elsewhere), and a REMOTE session can report a path identical
+ * to the local home without sharing it. String equality can therefore never
+ * be certainty; it is the strongest signal Cordis exposes today. Certain
+ * expansion needs a host-provided session home or an explicit local-session
+ * flag — revisit then, not with more heuristics.
  */
 function trustedHome(cwd: string | undefined, isWindowsHost: boolean): string | undefined {
   if (cwd === undefined || cwd.length === 0) return undefined;
@@ -82,7 +121,7 @@ function trustedHome(cwd: string | undefined, isWindowsHost: boolean): string | 
   if (typeof home !== "string" || home.length === 0) return undefined;
   const homeIsWindows = /^[a-zA-Z]:[\\/]/.test(home) || home.startsWith("\\\\");
   // Style mismatch can never sit within the home, but check it first so a
-  // POSIX cwd is never prefix-compared against a Windows home.
+  // POSIX cwd is never segment-compared against a Windows home.
   if (homeIsWindows !== isWindowsHost) return undefined;
   return pathWithin(home, cwd, homeIsWindows) ? home : undefined;
 }

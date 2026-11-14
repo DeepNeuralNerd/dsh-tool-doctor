@@ -2,6 +2,16 @@
 
 ## Unreleased (2026-11-14)
 
+- **Reviewer round (4th): home containment resolves the cwd string first.**
+  Containment ran on the RAW cwd, so `C:\Users\Srini\project\..\..\elsewhere`
+  — which resolves OUTSIDE the home — still passed and expanded `~`. The
+  comparison now runs on segment-normalized paths: separators unified, `.`
+  dropped, `..` collapsed with root protection (drive letter / POSIX `/` /
+  UNC share never pop). The doc block records the honest limits: collapse is
+  text-level (no symlink resolution), and a remote session can report a path
+  identical to the local home — certainty needs a host-provided session home
+  or an explicit local-session signal, not a better string heuristic.
+
 - **Reviewer round (3rd): tilde home-trust strengthened from style-match to
   containment.** Matching path styles only proved the same OS, not a shared
   home — a same-OS remote session could still have `~` expand to the plugin
