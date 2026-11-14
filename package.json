@@ -1,6 +1,6 @@
 {
   "name": "dsh-tool-doctor",
-  "description": "Repairs recognized DeepSeek Harness tool-call errors and shows what changed in a local dashboard.",
+  "description": "Repair common DeepSeek Harness tool-call mistakes and review the results in a local dashboard.",
   "version": "1.0.0",
   "keywords": [
     "deepseek-harness",

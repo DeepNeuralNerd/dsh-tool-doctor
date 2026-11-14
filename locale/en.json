@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Tool doctor",
-    "description": "Your AI assistant wastes turns fixing small mistakes in its own file requests — a line number past the end of a file, a number written as text, a search phrase that no longer matches. Tool doctor corrects these automatically, so tasks finish on the first try instead of the third. Nothing to set up and nothing to learn: install it, switch it on, and forget it is there. It never changes your files or your words — only the assistant's mistaken requests — and every correction is shown in a simple dashboard in Plugin Manager. Genuine failures still appear exactly as they are, and nothing leaves your computer. Turn it off at any time and DSH behaves exactly as if it had never been installed.",
+    "description": "Fewer failed tool calls. Less backtracking. Tool doctor repairs recognized argument mistakes, retries selected errors, and shows repair outcomes in its Plugin Manager dashboard. See what changed, find recurring failures, and choose which rules run.",
     "detail": "docs/DETAIL.md"
   }
 }

@@ -1,10 +1,20 @@
 # Tool doctor
 
-**In plain words:** your AI assistant keeps tripping over small, silly mistakes in its own requests — "that line isn't in the file," "that number has to be a number," "I can't find that exact text" — and each trip means the same request, over again. That is time you wait and tokens you pay. Tool doctor catches and fixes those mistakes automatically. It never touches your files and never rewrites your words, it shows every fix it makes in a dashboard you can ignore, it sends nothing over the internet, and a single switch turns it off with no trace.
+**Fewer failed tool calls. Less backtracking.**
 
-**For the engineer:** mechanical tool-call failures are pure waste. A `read` offset past the end of a file, a `limit` above the schema maximum, an `edit` anchor one space off — the host correctly refuses, and the model then pays a full round-trip to notice the error, guess the fix, and resend. Across a long session those small taxes become visible latency, burned tokens, and stalled work, while the model does the job of a typo-corrector instead of the job you gave it.
+An AI assistant can understand your task and still stumble over a tool request: a line number past the end of a file, a number supplied as text, or an edit that misses because its spacing changed. Tool doctor catches **supported, mechanical mistakes** in DeepSeek Harness (DSH), corrects the request or retries a recoverable error, and records what happened. You spend less time watching the assistant repeat a call it could have fixed.
 
-Tool doctor removes that tax. It repairs mechanical argument mistakes before a call runs, and retries the recoverable failures after they happen — returning the result the call was meant to produce, or the original error completely untouched when nothing was safely fixable. Everything genuine stays exactly the host's behavior; only the trivia stops reaching the model.
+For example, if a tool rejects `limit: 5000` and reports a maximum of `2000`, Tool doctor can retry with `limit: 2000`. If that retry fails, the original error remains available to the assistant. The dashboard distinguishes a successful repair from an attempted repair, an ordinary failure, and a call merely recognized in text.
+
+![Illustration of a tool call repaired and recorded](docs/preview.svg)
+
+## Why use it
+
+- **Keep work moving.** Repair recognized argument mistakes before dispatch and recover from selected errors after dispatch, without asking the model to work out every mechanical correction itself.
+- **See what actually happened.** Review bounded argument previews, repair outcomes, recurring failures, and estimated token savings in the Plugin Manager dashboard. Recognizing a call in text does not count as a successful repair.
+- **Stay in control.** Switch rules individually, inspect a rule's recent activity, try shadow mode to record potential pre-dispatch repairs while sending the original arguments, or disable the plugin. A circuit breaker pauses recovery classes that repeatedly fail.
+
+Tool doctor is useful if you are new to DSH and want fewer avoidable interruptions. If you build long coding workflows, its schema-aware repairs, bounded retries, and local diagnostics also give you a way to inspect where tool calls go wrong.
 
 ## What it does
 
@@ -13,7 +23,7 @@ Tool doctor removes that tax. It repairs mechanical argument mistakes before a c
 - **Recognizes in-text tool calls.** When the model emits supported call markup as text, the plugin can promote it to a structured tool call. Promotion is recorded separately from execution success.
 - **Provides diagnostics and controls.** The dashboard shows recent calls, repair outcomes, recurring error patterns, rule switches, and editable model guidance. A circuit breaker temporarily pauses recovery classes that repeatedly fail.
 
-The plugin handles mechanical patterns. It cannot infer a model's intent, make a missing file exist, or resolve every permission, tool, or command failure. A successful call after an argument rewrite is counted as a repair outcome; it does not prove that the original call would have failed. Token savings shown in the dashboard are estimates.
+The plugin handles mechanical patterns. It cannot infer a model's intent, make a missing file exist, or resolve every permission, tool, or command failure. A successful call after an argument rewrite is counted as a repair outcome; it does not prove that the original call would have failed. Token savings shown in the dashboard are estimates, not measured billing reductions.
 
 ## Use it in DSH
 
