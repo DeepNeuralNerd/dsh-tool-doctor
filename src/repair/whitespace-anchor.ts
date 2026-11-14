@@ -2,9 +2,9 @@
  * Whitespace-equivalent anchor variants for the EDIT_WHITESPACE rule (rule 4).
  *
  * Pure text mechanics — no I/O, no file knowledge: produces at most two
- * variants of an edit anchor (line-ending flip and leading-indentation flip)
- * so the retrying stage can re-dispatch them and let the HOST adjudicate
- * which spelling actually exists in the file.
+ * variants of an edit anchor (line-ending flip, leading-indentation flip,
+ * trailing-whitespace strip) so the retrying stage can re-dispatch them and
+ * let the HOST adjudicate which spelling actually exists in the file.
  *
  * @module dsh-tool-doctor/repair/whitespace-anchor
  */
@@ -80,6 +80,18 @@ export function editAnchorVariants(needle: string): string[] {
 
     if (indentVariant !== undefined && indentVariant !== needle) {
       variants.push(indentVariant);
+    }
+  }
+
+  // Rule 3: Trailing-whitespace strip. Models often copy anchors with the
+  // editor's trailing spaces/tabs intact — characters the file never had.
+  // Stripping them per line is the same spelling-equivalence class; the host
+  // stays the match authority, so an over-eager variant can only fail to match.
+  // A whitespace-only anchor would trim to empty and is left unvaried.
+  if (variants.length < 2) {
+    const trimmed = needle.replace(/[ \t]+(?=\r?$)/gm, "");
+    if (trimmed !== needle && trimmed.length > 0) {
+      variants.push(trimmed);
     }
   }
 

@@ -3,7 +3,7 @@
  *
  * When an edit fails because `old_string` was not found, the anchor may still
  * exist in the file under a whitespace-equivalent spelling (CRLF vs LF, tabs
- * vs spaces). This post-stage regenerates the anchor's variants
+ * vs spaces, trailing whitespace). This post-stage regenerates the anchor's variants
  * (repair/whitespace-anchor) and retries the ORIGINAL edit through the host
  * dispatcher once per variant, stopping at the first success. The host is the
  * match authority: a variant that matches ambiguously is rejected by the host,
@@ -76,7 +76,7 @@ export const anchorWhitespaceStage: PostStage = {
         return {
           result,
           args: retryArgs,
-          changeLabel: "Retried edit with whitespace-equivalent anchor (line-ending/indentation flip)",
+          changeLabel: "Retried edit with whitespace-equivalent anchor (line-ending/indent/trailing-space flip)",
         };
       }
     }

@@ -39,6 +39,33 @@ describe("editAnchorVariants", () => {
     expect(variants).toEqual([]); // Nothing to flip on single line without leading ws.
   });
 
+  it("single-line anchor with trailing space → trimmed variant", () => {
+    // Probe case (2026-11-14): "beta two " never matches the file's "beta two".
+    const variants = editAnchorVariants("beta two ");
+    expect(variants).toContain("beta two");
+  });
+
+  it("multi-line anchor with per-line trailing whitespace → stripped variant", () => {
+    const needle = "line1  \nline2\t";
+    const variants = editAnchorVariants(needle);
+    expect(variants).toContain("line1\nline2");
+  });
+
+  it("two-variant cap holds even with trailing whitespace present", () => {
+    // "\t"-indented multi-line with trailing spaces engages all three rules;
+    // the first two win the cap and the call stays bounded at 2 retries.
+    const variants = editAnchorVariants("\tline1  \n\tline2");
+    expect(variants.length).toBeLessThanOrEqual(2);
+  });
+
+  it("whitespace-only anchor produces no empty variant", () => {
+    expect(editAnchorVariants("   ")).toEqual([]);
+  });
+
+  it("anchor without trailing whitespace gains no third variant", () => {
+    expect(editAnchorVariants("beta two")).toEqual([]);
+  });
+
   it("variants never contain the original", () => {
     const needle = "line1\nline2";
     const variants = editAnchorVariants(needle);

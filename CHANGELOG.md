@@ -7,6 +7,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- **Whitespace edit-retry now strips trailing whitespace (rule 4).** Live probing
+  found the one shape the generator abstained on: an `old_string` carrying
+  per-line trailing spaces/tabs the file never had — a common emission artifact
+  when a model copies an anchor with editor markers intact. `editAnchorVariants`
+  gained a third spelling-equivalent variant (per-line trailing-whitespace
+  strip, whitespace-only anchors left unvaried, the two-retry cap unchanged —
+  the host remains the match authority). Five tests added (442 passing).
 - **Path-quote unwrap now covers image readers.** The candidate ledger recorded a
   `read_image` call whose `file_path` arrived quote-wrapped (`"\"C:\…\f.md\""`)
   and passed through unrepaired — the same emission artifact the `path-quotes`
