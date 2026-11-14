@@ -49,6 +49,7 @@ import {
   setGuidanceText,
 } from "./support/prompt.ts";
 import {
+  healTextBlock,
   hasHealSignal,
   healGate,
   parseToolCallsFromText,
@@ -80,7 +81,7 @@ export * from "./repair/source-path-scope.ts";
 export { executeBridgeDirectCall, isBridgeableDirectCall } from "./recovery/direct-bridge.ts";
 export { executeNestedTool, nestedCallId } from "./recovery/nested-dispatch.ts";
 export { DEFAULT_GUIDANCE_TEXT, getGuidanceText, setGuidanceText, resetGuidanceText } from "./support/prompt.ts";
-export { hasHealSignal, healGate, parseToolCallsFromText, stripToolCallMarkup, type ParsedToolCall } from "./support/tool-healing.ts";
+export { healTextBlock, hasHealSignal, healGate, parseToolCallsFromText, stripToolCallMarkup, type HealedTextBlock, type ParsedToolCall } from "./support/tool-healing.ts";
 
 /** Cordis plugin identifier. */
 export const name = "tool-doctor";
@@ -450,7 +451,7 @@ export function apply(ctxRaw: unknown, userConfig: Partial<DoctorConfig> = {}): 
                 res.writeHead(400, { "content-type": "text/plain" });
                 res.end(String(e));
               }
-            });
+            }).catch((e: unknown) => respondReadError(res, e));
             return;
           }
           json(res, 200, { text: getGuidanceText(), defaultText: DEFAULT_GUIDANCE_TEXT });
@@ -497,7 +498,7 @@ export function apply(ctxRaw: unknown, userConfig: Partial<DoctorConfig> = {}): 
               return;
             }
             json(res, 200, config);
-          });
+          }).catch((e: unknown) => respondReadError(res, e));
         },
       });
       const disposeCandidates = server.register({
@@ -694,6 +695,13 @@ export function apply(ctxRaw: unknown, userConfig: Partial<DoctorConfig> = {}): 
         // upstream adapter's (small-int) block indices and land right after
         // the healed text block — the semantically correct position.
         let nextHealIndex = 1 << 30;
+        // Per-stream unique id prefix: promoted ids stay unique across every
+        // text block of this message and can never collide with native
+        // tool-call ids (which use their own namespace).
+        const idPrefix = `heal_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+        // Per-stream sequence: promoted ids stay unique across every text
+        // block of this message (each block's parse starts its counter at 0).
+        let healSeq = 0;
         for await (const chunk of next()) {
           const c = chunk as {
             type?: string;
@@ -701,53 +709,53 @@ export function apply(ctxRaw: unknown, userConfig: Partial<DoctorConfig> = {}): 
             block?: { type?: string; text?: string };
           };
           if (c?.type === "block-end" && c.block?.type === "text" && typeof c.block.text === "string") {
-            const text = c.block.text;
-            if (hasHealSignal(text)) {
-              const calls = parseToolCallsFromText(text, allowed);
-              if (calls.length > 0) {
-                // Re-emit the text block with the markup stripped. block-end
-                // .block is authoritative, so this overrides the streamed text.
+            const healed = healTextBlock(c.block.text, allowed, idPrefix, healSeq);
+            if (healed) {
+              healSeq += healed.calls.length;
+              // Re-emit the text block with the markup stripped. block-end
+              // .block is authoritative, so this overrides the streamed text.
+              yield {
+                type: "block-end",
+                index: c.index,
+                block: { type: "text", text: healed.text },
+              };
+              // Append healed tool-call blocks on fresh, non-colliding indices.
+              for (const call of healed.calls) {
+                const idx = nextHealIndex++;
+                yield { type: "block-start", index: idx, blockType: "tool-call" };
+                yield {
+                  type: "tool-call-delta",
+                  index: idx,
+                  id: call.id,
+                  name: call.name,
+                  argumentsDelta: call.arguments,
+                };
                 yield {
                   type: "block-end",
-                  index: c.index,
-                  block: { type: "text", text: stripToolCallMarkup(text, allowed) },
+                  index: idx,
+                  block: { type: "tool-call", id: call.id, name: call.name, arguments: call.arguments },
                 };
-                // Append healed tool-call blocks on fresh, non-colliding indices.
-                for (const call of calls) {
-                  const idx = nextHealIndex++;
-                  yield { type: "block-start", index: idx, blockType: "tool-call" };
-                  yield {
-                    type: "tool-call-delta",
-                    index: idx,
-                    id: call.id,
-                    name: call.name,
-                    argumentsDelta: call.arguments,
-                  };
-                  yield {
-                    type: "block-end",
-                    index: idx,
-                    block: { type: "tool-call", id: call.id, name: call.name, arguments: call.arguments },
-                  };
-                }
-                for (const call of calls) {
-                  try {
-                    const spanText = text.slice(call.span[0], call.span[1]) ?? call.name;
-                    recordEvent({
-                      id: `norm_resp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-                      time: Date.now(),
-                      toolName: call.name,
-                      category: "RESPONSE_TOOL_HEAL",
-                      wasHealed: true,
-                      originalArgsPreview: compactPreview(spanText),
-                      normalizedArgsPreview: compactPreview(call.arguments),
-                      status: "success",
-                    });
-                  } catch {
-                    // Recording is diagnostic only; never disturb the stream.
-                  }
-                }
-                continue;
               }
+              for (const call of healed.calls) {
+                try {
+                  const spanText = c.block.text.slice(call.span[0], call.span[1]) ?? call.name;
+                  recordEvent({
+                    id: `norm_resp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                    time: Date.now(),
+                    toolName: call.name,
+                    category: "RESPONSE_TOOL_HEAL",
+                    wasHealed: true,
+                    originalArgsPreview: compactPreview(spanText),
+                    normalizedArgsPreview: compactPreview(call.arguments),
+                    // Promotion is not an execution outcome yet; count it in its
+                    // own bucket so healed-success stays a dispatch metric.
+                    status: "promoted",
+                  });
+                } catch {
+                  // Recording is diagnostic only; never disturb the stream.
+                }
+              }
+              continue;
             }
           }
           yield chunk;
@@ -772,20 +780,58 @@ function json(res: ResponseLike, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
+/** Dashboard payloads are small JSON; anything larger is rejected, not buffered. */
+const MAX_BODY_BYTES = 10 * 1024 * 1024; // 10 MiB
+
+class BodySizeError extends Error {
+  constructor() {
+    super(`request body exceeds ${MAX_BODY_BYTES} bytes`);
+    this.name = "BodySizeError";
+  }
+}
+
 /** Read a request body to completion (dashboard POST/PUT payloads). */
 function readBody(req: unknown): Promise<string> {
   return new Promise((resolve, reject) => {
-    const stream = req as { on?: (event: string, cb: (chunk: string) => void) => void };
+    const stream = req as {
+      on?: (event: string, cb: (...args: unknown[]) => void) => void;
+      destroy?: () => void;
+    };
     if (typeof stream.on !== "function") {
       resolve("");
       return;
     }
     let body = "";
-    stream.on("data", (chunk: string) => {
-      body += chunk;
+    let settled = false;
+    const settle = (fn: () => void): void => {
+      if (!settled) {
+        settled = true;
+        fn();
+      }
+    };
+    stream.on("data", (chunk: unknown) => {
+      if (settled) return;
+      body += typeof chunk === "string" ? chunk : String(chunk);
+      if (body.length > MAX_BODY_BYTES) {
+        settle(() => reject(new BodySizeError()));
+        try {
+          stream.destroy?.(); // stop buffering a runaway payload
+        } catch {
+          // Best effort; the rejection already bounds memory.
+        }
+      }
     });
-    stream.on("end", () => resolve(body));
+    stream.on("end", () => settle(() => resolve(body)));
+    stream.on("error", (err: unknown) =>
+      settle(() => reject(err instanceof Error ? err : new Error(String(err)))),
+    );
   });
+}
+
+/** Respond to a readBody failure with the right status instead of hanging. */
+function respondReadError(res: ResponseLike, e: unknown): void {
+  if (e instanceof BodySizeError) json(res, 413, { error: e.message });
+  else json(res, 500, { error: `failed to read request body: ${errorText(e) ?? String(e)}` });
 }
 
 export default { name, inject, apply };

@@ -36,6 +36,9 @@ export const en = {
   kpiRateDesc: "Share of repair attempts that ended in a successful call.",
   kpiHealed: "Healed calls",
   kpiHealedFailedSuffix: "failed repairs",
+  kpiPromoted: "Promoted calls",
+  kpiPromotedDesc:
+    "Tool-call markup lifted out of streamed text (no execution outcome yet).",
   kpiSavedTokens: "Estimated tokens saved",
   kpiSavedTokensDesc:
     "Metered input tokens avoided across successful repairs (estimate).",

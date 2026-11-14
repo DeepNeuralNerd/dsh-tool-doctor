@@ -682,6 +682,12 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
           desc={stats.healedFailed > 0 ? `${stats.healedFailed} ${t("kpiHealedFailedSuffix")}` : t("kpiRateDesc")}
         />
         <KpiCard
+          title={t("kpiPromoted")}
+          value={stats.promoted}
+          toneClass={styles.kpiValueAccent}
+          desc={t("kpiPromotedDesc")}
+        />
+        <KpiCard
           title={t("kpiSavedTokens")}
           badge={t("estimateBadge")}
           value={formatTokens(stats.estimatedTokensSaved)}

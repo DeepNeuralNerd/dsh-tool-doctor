@@ -1,5 +1,17 @@
 # Changelog — dsh-tool-doctor
 
+## Unreleased (2026-11-14)
+
+Review fixes for the response-side healing path (R1-R7):
+
+- **R1** Sensitive values in argument previews are redacted before persistence or dashboard exposure; the 180-char cap is no longer treated as redaction (`support/preview.ts`).
+- **R2** `[ARGS]` (pattern 5) is now a heal signal, so bare `name[ARGS]{...}` calls reach the parser in the stream hook; covered by an end-to-end `healTextBlock` test.
+- **R3** Glued sibling bodies inside one marker are each promoted as their own call instead of only the last body surviving span coverage.
+- **R4** Promoted tool-call ids use a per-stream nonce prefix plus a per-stream sequence, so they never collide across text blocks or with native `call_*` ids.
+- **R5** The relaxed JSON fallback is now token-aware: Python literals (`None`/`True`/`False`) and unquoted keys are handled without rewriting literal text inside string values.
+- **R6** Promotion success is tracked as its own `promoted` status/counter (server stats, persisted summary, dashboard KPI) instead of inflating healed-success before any execution outcome exists.
+- **R7** Dashboard request bodies are capped at 10 MiB with proper error handling: over-limit -> 413, stream errors -> 500, runaway payloads destroyed; both call sites catch read failures.
+
 ## 1.0.0 (2026-11-13)
 
 Ground-up rewrite of `dsh-tool-healer` as a new plugin with a clean architecture.

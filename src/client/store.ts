@@ -23,7 +23,8 @@ export interface NormalizerRecord {
   originalArgsPreview: string;
   normalizedArgsPreview?: string;
   normalizationSummary?: string;
-  status: "success" | "failed" | "passthrough";
+  /** "promoted" = response-side markup became a tool call (no execution outcome yet). */
+  status: "success" | "failed" | "passthrough" | "promoted";
   errorMessage?: string;
   tokensSaved?: number;
 }
@@ -33,6 +34,8 @@ export interface NormalizerStats {
   totalIntercepted: number;
   healedSuccess: number;
   healedFailed: number;
+  /** Response-side promotions, counted separately from dispatch outcomes. */
+  promoted: number;
   passThrough: number;
   passThroughFailed: number;
   estimatedTokensSaved: number;
@@ -86,6 +89,7 @@ export function createEmptyStats(): NormalizerStats {
     totalIntercepted: 0,
     healedSuccess: 0,
     healedFailed: 0,
+    promoted: 0,
     passThrough: 0,
     passThroughFailed: 0,
     estimatedTokensSaved: 0,
@@ -161,8 +165,11 @@ export function coerceStats(raw: unknown): NormalizerStats | null {
         typeof entry.normalizationSummary === "string"
           ? entry.normalizationSummary
           : undefined,
+      // Preserve "promoted" faithfully; unknown values fall back to success.
       status:
-        entry.status === "failed" || entry.status === "passthrough"
+        entry.status === "failed" ||
+        entry.status === "passthrough" ||
+        entry.status === "promoted"
           ? entry.status
           : "success",
       errorMessage:
@@ -176,6 +183,8 @@ export function coerceStats(raw: unknown): NormalizerStats | null {
     totalIntercepted: coerceNumber(s.totalIntercepted),
     healedSuccess: coerceNumber(s.healedSuccess),
     healedFailed: coerceNumber(s.healedFailed),
+    // Optional on the wire: payloads from an older server load as 0.
+    promoted: coerceNumber(s.promoted),
     passThrough: coerceNumber(s.passThrough),
     passThroughFailed: coerceNumber(s.passThroughFailed),
     estimatedTokensSaved: coerceNumber(s.estimatedTokensSaved),

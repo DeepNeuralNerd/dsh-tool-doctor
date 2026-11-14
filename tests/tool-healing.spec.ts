@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   hasHealSignal,
   healGate,
+  healTextBlock,
   parseToolCallsFromText,
   stripToolCallMarkup,
 } from "../src/support/tool-healing.ts";
@@ -22,14 +23,14 @@ describe("hasHealSignal", () => {
     expect(hasHealSignal('<function=read>\n<parameter=file_path>/a</parameter>\n</function>')).toBe(true);
     expect(hasHealSignal('[TOOL_CALLS]\n[{"name":"bash","arguments":{"command":"ls"}}]')).toBe(true);
     expect(hasHealSignal('<minimax:tool_call>read{"file_path":"/a"}</minimax:tool_call>')).toBe(true);
+    // Pattern 5's only marker — without it the stream hook (which runs the
+    // parser solely on this signal) could never promote a bare [ARGS] call.
+    expect(hasHealSignal('Calling read[ARGS]{"file_path":"/a"}')).toBe(true);
   });
 
-  it("stays quiet on healthy prose and on the markerless bare form", () => {
+  it("stays quiet on healthy prose", () => {
     expect(hasHealSignal("Here is the file content you asked for.")).toBe(false);
     expect(hasHealSignal('const x = "tool"; // no markup')).toBe(false);
-    // Pattern 5 (name[ARGS]{json}) has no explicit marker, so it never trips
-    // the fast pre-filter — the parser still promotes it when it runs.
-    expect(hasHealSignal('Calling read [ARGS] {"file_path": "/a"}')).toBe(false);
   });
 });
 
@@ -91,13 +92,42 @@ describe("parseToolCallsFromText — the six patterns", () => {
     expect(calls.map((c) => c.name)).toEqual(["read", "bash"]);
   });
 
-  it("promotes the last glued body when two are glued inside one marker (G4 tiling)", () => {
-    // The first body's span is covered by its own marker region, so only the
-    // final body — which owns the closing tag — gets promoted.
+  it("promotes every glued body inside one marker as its own call (G4 tiling)", () => {
+    // Each sibling owns its own span; only the final body extends to the
+    // closing tag. No call is lost to span coverage.
     const text = '<tool_call>{"name":"read","arguments":{"file_path":"/a"}}{"name":"bash","arguments":{"command":"ls"}}</tool_call>';
     const calls = parseToolCallsFromText(text, allow("read", "bash"));
+    expect(calls.length).toBe(2);
+    expect(calls.map((c) => c.name)).toEqual(["read", "bash"]);
+    // Spans tile the marker exactly: first body, then final body + closing tag.
+    expect(calls[0].span[1]).toBe(calls[1].span[0]);
+  });
+
+  it("namespaces generated ids with a per-stream prefix (R4)", () => {
+    const text = '<tool_call>{"name":"read","arguments":{"file_path":"/a"}}</tool_call>';
+    // Default keeps standalone parsing stable.
+    expect(parseToolCallsFromText(text, allow("read"))[0].id).toBe("call_0");
+    // A stream-unique prefix namespaces every id in the block…
+    const calls = parseToolCallsFromText(text, allow("read"), "heal_ab12cd34ef56");
+    expect(calls[0].id).toBe("heal_ab12cd34ef56_0");
+  });
+
+  it("keeps Python literals inside string values intact (R5)", () => {
+    // The relaxed fallback must not rewrite text that lives inside strings:
+    // a command mentioning None/True stays exactly as the model wrote it.
+    const text = '<tool_call>{"name":"bash","arguments":{"command":"python -c \\"print(None, True)\\""}}</tool_call>';
+    const calls = parseToolCallsFromText(text, allow("bash"));
     expect(calls.length).toBe(1);
-    expect(calls[0].name).toBe("bash");
+    expect(JSON.parse(calls[0].arguments)).toEqual({
+      command: 'python -c "print(None, True)"',
+    });
+  });
+
+  it("still promotes single-quoted / unquoted-key / trailing-comma bodies (R5 regression)", () => {
+    const text = "<tool_call>{name: read, arguments: {file_path: /a.txt,},}</tool_call>";
+    const calls = parseToolCallsFromText(text, allow("read"));
+    expect(calls.length).toBe(1);
+    expect(JSON.parse(calls[0].arguments)).toEqual({ file_path: "/a.txt" });
   });
 
   it("parses Gemma native tool_call (pattern 2)", () => {
@@ -220,5 +250,44 @@ describe("stripToolCallMarkup", () => {
     const text = '<tool_call>{"name":"other","arguments":{}}</tool_call>';
     // "other" is not allowed → the marker stays in place.
     expect(stripToolCallMarkup(text, allow("read"))).toContain("other");
+  });
+});
+
+describe("healTextBlock — stream-hook transform (R2/R4)", () => {
+  it("promotes a bare [ARGS] call end-to-end and strips its markup", () => {
+    const text = 'Calling read[ARGS]{"file_path":"/a.txt"} now.';
+    const healed = healTextBlock(text, allow("read"), "heal_test");
+    expect(healed).not.toBeNull();
+    expect(healed!.calls.length).toBe(1);
+    expect(healed!.calls[0].id).toBe("heal_test_0");
+    expect(JSON.parse(healed!.calls[0].arguments)).toEqual({ file_path: "/a.txt" });
+    // The name is part of the marker syntax (`read[ARGS]{...}`), so it strips
+    // with the markup — the promoted call itself carries the name.
+    expect(healed!.text).toBe("Calling  now.");
+  });
+
+  it("returns null for healthy prose (byte-for-byte passthrough)", () => {
+    expect(healTextBlock("Just a normal answer.", allow("read"))).toBeNull();
+  });
+
+  it("respects the promotion allowlist", () => {
+    const text = 'Calling other[ARGS]{"x":1}';
+    // "other" is not allowed → nothing promoted, block passes through.
+    expect(healTextBlock(text, allow("read"), "heal_test")).toBeNull();
+  });
+
+  it("keeps ids unique across two blocks of one stream (R4)", () => {
+    const prefix = "heal_stream";
+    // The hook advances the per-stream sequence by each block's call count.
+    const a = healTextBlock('Calling read[ARGS]{"file_path":"/a"}', allow("read"), prefix, 0)!;
+    const b = healTextBlock(
+      'Calling bash[ARGS]{"command":"ls"}',
+      allow("bash"),
+      prefix,
+      a.calls.length,
+    )!;
+    const ids = [...a.calls, ...b.calls].map((c) => c.id);
+    expect(new Set(ids).size).toBe(ids.length); // no collisions across blocks
+    expect(ids).not.toContain("call_0");        // never collides with native ids
   });
 });

@@ -22,7 +22,13 @@ export interface NormalizerRecord {
   normalizedArgsPreview?: string;
   /** Short bounded description of the fields or dispatch path that changed. */
   normalizationSummary?: string;
-  status: "success" | "failed" | "passthrough";
+  /**
+   * Dispatch-side outcomes are success/failed/passthrough. Response-side
+   * promotion is its own status: the markup became a tool call, but the tool
+   * has not run yet — counting it as "success" would inflate healed-success
+   * before any execution outcome exists to measure.
+   */
+  status: "success" | "failed" | "passthrough" | "promoted";
   errorMessage?: string;
   /**
    * Measured input tokens this healed call avoided, already multiplied by the
@@ -36,6 +42,12 @@ export interface NormalizerStats {
   totalIntercepted: number;
   healedSuccess: number;
   healedFailed: number;
+  /**
+   * Response-side promotions: markup turned into tool calls, counted before
+   * any execution outcome exists. Kept out of healedSuccess/healedFailed so
+   * the healing rate measures dispatch repairs only.
+   */
+  promoted: number;
   /** Successful calls that were not modified by the normalizer. */
   passThrough: number;
   /** Failed calls that reached the host without a normalization attempt. */
@@ -67,6 +79,7 @@ export type NormalizerAggregate = Pick<
   | "totalIntercepted"
   | "healedSuccess"
   | "healedFailed"
+  | "promoted"
   | "passThrough"
   | "passThroughFailed"
   | "estimatedTokensSaved"
@@ -90,6 +103,7 @@ export class ToolNormalizerTracker {
   private totalIntercepted = 0;
   private healedSuccess = 0;
   private healedFailed = 0;
+  private promoted = 0;
   private passThrough = 0;
   private passThroughFailed = 0;
   private estimatedTokensSaved = 0;
@@ -118,7 +132,11 @@ export class ToolNormalizerTracker {
    */
   public record(record: NormalizerRecord): void {
     this.totalIntercepted++;
-    if (record.status === "success" && record.wasHealed) {
+    // Promotion is its own bucket: the markup became a tool call, but no
+    // execution outcome exists yet to count as healed success or failure.
+    if (record.status === "promoted") {
+      this.promoted++;
+    } else if (record.status === "success" && record.wasHealed) {
       this.healedSuccess++;
     } else if (record.status === "failed" && record.wasHealed) {
       this.healedFailed++;
@@ -177,6 +195,7 @@ export class ToolNormalizerTracker {
     this.totalIntercepted = stats.totalIntercepted;
     this.healedSuccess = stats.healedSuccess;
     this.healedFailed = stats.healedFailed;
+    this.promoted = stats.promoted;
     this.passThrough = stats.passThrough;
     this.passThroughFailed = stats.passThroughFailed;
     this.estimatedTokensSaved = stats.estimatedTokensSaved;
@@ -213,6 +232,7 @@ export class ToolNormalizerTracker {
       totalIntercepted: this.totalIntercepted,
       healedSuccess: this.healedSuccess,
       healedFailed: this.healedFailed,
+      promoted: this.promoted,
       passThrough: this.passThrough,
       passThroughFailed: this.passThroughFailed,
       estimatedTokensSaved: this.estimatedTokensSaved,
@@ -235,6 +255,7 @@ export class ToolNormalizerTracker {
     this.totalIntercepted = 0;
     this.healedSuccess = 0;
     this.healedFailed = 0;
+    this.promoted = 0;
     this.passThrough = 0;
     this.passThroughFailed = 0;
     this.estimatedTokensSaved = 0;

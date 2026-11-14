@@ -68,6 +68,12 @@ interface PersistedAggregate {
    */
   failuresByTool?: Record<string, number>;
   failuresByCategory?: Record<string, number>;
+  /**
+   * Response-side promotions (markup → tool call), counted separately from
+   * healed success/failure because no execution outcome exists yet. Optional:
+   * summaries written before the counter existed still load and start at 0.
+   */
+  promoted?: number;
 }
 
 const CATEGORIES = new Set<HealCategory>(HEAL_CATEGORIES);
@@ -76,6 +82,7 @@ const STATUSES = new Set<NormalizerRecord["status"]>([
   "success",
   "failed",
   "passthrough",
+  "promoted",
 ]);
 
 /** Serialized file operations prevent reset, append, and summary writes from overtaking each other. */
@@ -166,6 +173,7 @@ function accumulateRecord(
     | "totalIntercepted"
     | "healedSuccess"
     | "healedFailed"
+    | "promoted"
     | "passThrough"
     | "passThroughFailed"
   >,
@@ -176,7 +184,10 @@ function accumulateRecord(
   record: NormalizerRecord,
 ): void {
   totals.totalIntercepted++;
-  if (record.status === "success" && record.wasHealed) totals.healedSuccess++;
+  // Promotion is its own bucket (no execution outcome exists yet), mirroring
+  // the tracker's counting so replay and live counters agree.
+  if (record.status === "promoted") totals.promoted = (totals.promoted ?? 0) + 1;
+  else if (record.status === "success" && record.wasHealed) totals.healedSuccess++;
   else if (record.status === "failed" && record.wasHealed)
     totals.healedFailed++;
   else if (record.status === "failed") totals.passThroughFailed++;
@@ -221,6 +232,7 @@ function aggregateFromRecords(
     totalIntercepted: 0,
     healedSuccess: 0,
     healedFailed: 0,
+    promoted: 0,
     passThrough: 0,
     passThroughFailed: 0,
   };
@@ -262,6 +274,7 @@ function snapshotAggregate(stats: NormalizerAggregate): PersistedAggregate {
     totalIntercepted: stats.totalIntercepted,
     healedSuccess: stats.healedSuccess,
     healedFailed: stats.healedFailed,
+    promoted: stats.promoted,
     passThrough: stats.passThrough,
     passThroughFailed: stats.passThroughFailed,
     estimatedTokensSaved: stats.estimatedTokensSaved,
@@ -321,6 +334,8 @@ export async function restoreFromLog(
     totalIntercepted: aggregate.totalIntercepted,
     healedSuccess: aggregate.healedSuccess,
     healedFailed: aggregate.healedFailed,
+    // Optional on disk: summaries written before the counter existed load as 0.
+    promoted: aggregate.promoted ?? 0,
     passThrough: aggregate.passThrough,
     passThroughFailed: aggregate.passThroughFailed,
     estimatedTokensSaved: aggregate.estimatedTokensSaved,

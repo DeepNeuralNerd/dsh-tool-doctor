@@ -45,6 +45,9 @@ const HEAL_SIGNALS: readonly string[] = [
   "[TOOL_CALLS]",
   "<|content_invoke_tool_json|>",
   "<minimax:tool_call>",
+  // Pattern 5's only marker. Without it the stream hook (which runs the parser
+  // solely on this signal) could never promote a bare `name[ARGS]{json}` call.
+  "[ARGS]",
 ];
 
 /** Fast check: does this text contain any known tool-call markup signal? */
@@ -181,34 +184,137 @@ function gemmaNormalise(raw: string): string {
 }
 
 /**
- * Minimal relaxed JSON parser: handles single quotes, unquoted keys,
- * Python-style True/False/None, and trailing commas.
+ * Minimal token-aware relaxed JSON parser: handles single quotes, unquoted
+ * keys, Python-style True/False/None, and trailing commas. The rewrite walks
+ * tokens instead of applying global regexes, so literal text inside strings is
+ * never rewritten — a command containing `None` or `True` stays intact.
+ * Returns null when the body cannot be parsed losslessly; the caller then
+ * leaves it unpromoted rather than guessing.
  */
 function relaxedJsonParse(raw: string): Record<string, unknown> | null {
-  try {
-    let s = raw;
-    // Python literals → JSON
-    s = s
-      .replace(/\bTrue\b/g, "true")
-      .replace(/\bFalse\b/g, "false")
-      .replace(/\bNone\b/g, "null");
-    // Single-quoted strings → double-quoted (simple case: no embedded quotes)
-    s = s.replace(
-      /'([^'\\]*(?:\\.[^'\\]*)*)'/g,
-      (_m, inner) => `"${inner.replace(/"/g, '\\"')}"`,
-    );
-    // Unquoted keys → quoted keys
-    s = s.replace(/(\{|\,)\s*(\w+)\s*:/g, (_m, pre, key) => `${pre} "${key}":`);
-    // Trailing commas before } or ]
-    s = s.replace(/,\s*([\]}])/g, "$1");
-    const obj: unknown = JSON.parse(s);
-    if (typeof obj === "object" && obj !== null && !Array.isArray(obj)) {
-      return obj as Record<string, unknown>;
-    }
-  } catch {
-    // Fall through
+  let i = 0;
+  const n = raw.length;
+
+  function skipWs(): void {
+    while (i < n && " \t\r\n".includes(raw[i]!)) i++;
   }
-  return null;
+
+  /** Read a double- or single-quoted string. Returns [value, terminated]. */
+  function readString(quote: string): [string, boolean] {
+    let out = "";
+    while (i < n) {
+      const ch = raw[i]!;
+      if (ch === "\\" && i + 1 < n) {
+        const esc = raw[i + 1]!;
+        switch (esc) {
+          case "n": out += "\n"; break;
+          case "t": out += "\t"; break;
+          case "r": out += "\r"; break;
+          case "b": out += "\b"; break;
+          case "f": out += "\f"; break;
+          case "/": out += "/"; break;
+          case '"': out += '"'; break;
+          case "'": out += "'"; break;
+          case "\\": out += "\\"; break;
+          default: out += esc; // Unknown escape: keep the character.
+        }
+        i += 2;
+        continue;
+      }
+      if (ch === quote) {
+        i++;
+        return [out, true];
+      }
+      out += ch;
+      i++;
+    }
+    return [out, false]; // Unterminated string.
+  }
+
+  /** Read a bare (unquoted) token up to the next structural character. */
+  function readBare(): string | null {
+    const start = i;
+    while (i < n && !",:{}[] \t\r\n".includes(raw[i]!)) i++;
+    if (i === start) return null;
+    return raw.slice(start, i);
+  }
+
+  function parseValue(): unknown | undefined {
+    skipWs();
+    const ch = raw[i];
+    if (ch === undefined) return undefined;
+    if (ch === "{") return parseObject();
+    if (ch === "[") return parseArray();
+    if (ch === '"' || ch === "'") {
+      const [val, closed] = readString(ch);
+      if (!closed) return undefined;
+      return val;
+    }
+    // Bare literal: true/false/null/True/False/None or a number.
+    const bare = readBare();
+    if (bare === null || bare.length === 0) return undefined;
+    switch (bare.toLowerCase()) {
+      case "true": return true;
+      case "false": return false;
+      case "null":
+      case "none": return null;
+    }
+    if (/^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(bare)) return Number(bare);
+    // Unquoted string value (last resort).
+    return bare;
+  }
+
+  function parseObject(): Record<string, unknown> | undefined {
+    i++; // consume {
+    const obj: Record<string, unknown> = {};
+    for (;;) {
+      skipWs();
+      if (raw[i] === "}") { i++; return obj; } // empty object or trailing comma
+      const ch = raw[i];
+      let key: string | undefined;
+      if (ch === '"' || ch === "'") {
+        const [val, closed] = readString(ch);
+        if (!closed) return undefined;
+        key = val;
+      } else {
+        const bare = readBare();
+        if (bare === null || bare.length === 0) return undefined;
+        key = bare;
+      }
+      skipWs();
+      if (raw[i] !== ":") return undefined;
+      i++; // consume :
+      const value = parseValue();
+      if (value === undefined) return undefined;
+      obj[key] = value;
+      skipWs();
+      if (raw[i] === ",") { i++; continue; }
+      if (raw[i] === "}") { i++; return obj; }
+      return undefined; // Malformed.
+    }
+  }
+
+  function parseArray(): unknown[] | undefined {
+    i++; // consume [
+    const arr: unknown[] = [];
+    for (;;) {
+      skipWs();
+      if (raw[i] === "]") { i++; return arr; } // empty array or trailing comma
+      const value = parseValue();
+      if (value === undefined) return undefined;
+      arr.push(value);
+      skipWs();
+      if (raw[i] === ",") { i++; continue; }
+      if (raw[i] === "]") { i++; return arr; }
+      return undefined; // Malformed.
+    }
+  }
+
+  const value = parseValue();
+  if (value === undefined || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
 }
 
 /** Parse the brace body opening at `pos`, strict first then relaxed. */
@@ -392,10 +498,16 @@ function coveredAt(pos: number, regions: Span[]): boolean {
  * calls with `id`, `name`, `arguments` (JSON string). `enabledToolNames`, when
  * given, is the promotion allowlist: a call whose name is not in the set is
  * not promoted (mirrors the Python allowlist gate).
+ *
+ * `idPrefix` namespaces the generated ids (`${idPrefix}_0`, `_1`, ...). The
+ * default `"call"` keeps standalone parsing stable; the stream hook passes a
+ * per-stream unique prefix so ids stay unique across every text block of one
+ * message and can never collide with native tool-call ids.
  */
 export function parseToolCallsFromText(
   text: string,
   enabledToolNames?: Set<string>,
+  idPrefix = "call",
 ): ParsedToolCall[] {
   const calls: ParsedToolCall[] = [];
   const tSpans = thinkSpans(text);
@@ -419,10 +531,11 @@ export function parseToolCallsFromText(
     if (enabledToolNames && !enabledToolNames.has(name)) return;
     covered.push([start, end]);
     const argsStr = typeof argsObj === "string" ? argsObj : JSON.stringify(argsObj);
-    calls.push({ id: `call_${calls.length}`, name, arguments: argsStr, span: [start, end] });
+    calls.push({ id: `${idPrefix}_${calls.length}`, name, arguments: argsStr, span: [start, end] });
   };
 
-  // 1. <tool_call>{json}</tool_call> — one call per glued {...} body.
+  // 1. <tool_call>{json}</tool_call> — one call per glued {...} body. Every sibling
+  // body is promoted on its own; only the final body extends to the closing tag.
   RE_JSON_TOOL.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = RE_JSON_TOOL.exec(text)) !== null) {
@@ -431,7 +544,7 @@ export function parseToolCallsFromText(
     if (inSpan(m.index, cSpans)) continue; // G2
     if (coveredAt(m.index, regions)) continue; // G4
     let cursor = openBrace;
-    let spanStart = m.index;
+    let bodyStart = m.index;
     for (;;) {
       const parsed = tryParseJsonAt(text, cursor);
       if (!parsed) break;
@@ -451,7 +564,10 @@ export function parseToolCallsFromText(
       const after = text.slice(end);
       const nextBody = /^\s*(\{)/.exec(after);
       if (nextBody && nextBody[1]) {
-        spanStart = end;
+        // Glued sibling: emit this call over its own body, then continue with
+        // the next one so no call is lost to span tiling.
+        addCall(name, args, bodyStart, end);
+        bodyStart = end;
         cursor = end + nextBody[0].length - 1;
         continue;
       }
@@ -459,7 +575,7 @@ export function parseToolCallsFromText(
       let fullEnd = end;
       const closeMatch = /^\s*(?:<\/tool_call>|<\|end_message\|>)/.exec(after);
       if (closeMatch) fullEnd = end + closeMatch[0].length;
-      addCall(name, args, spanStart, fullEnd);
+      addCall(name, args, bodyStart, fullEnd);
       break;
     }
   }
@@ -609,6 +725,36 @@ export function stripToolCallMarkup(
     result = result.slice(0, s) + result.slice(e);
   }
   return result;
+}
+
+/** One text block's worth of response-side healing. */
+export interface HealedTextBlock {
+  /** The block text with promoted markup stripped. */
+  text: string;
+  /** Promoted calls in source order, ready for tool-call emission. */
+  calls: ParsedToolCall[];
+}
+
+/**
+ * Apply the response-side healing transform to one complete text block — the
+ * exact pipeline the `llm/stream` hook runs at block-end: signal pre-filter,
+ * parse with the promotion allowlist, strip promoted markup from the prose.
+ * Returns null when the block is healthy (no signal, or no promotable call) so
+ * callers pass it through byte-for-byte.
+ */
+export function healTextBlock(
+  text: string,
+  enabledToolNames?: Set<string>,
+  idPrefix = "call",
+  idStart = 0,
+): HealedTextBlock | null {
+  if (!hasHealSignal(text)) return null;
+  const calls = parseToolCallsFromText(text, enabledToolNames, idPrefix);
+  if (calls.length === 0) return null;
+  // Renumber from `idStart` so a per-stream caller keeps ids unique across
+  // every text block of one message — each block's own parse starts at zero.
+  const numbered = calls.map((c, i) => ({ ...c, id: `${idPrefix}_${idStart + i}` }));
+  return { text: stripToolCallMarkup(text, enabledToolNames), calls: numbered };
 }
 
 // ─── Gate (from passthrough_healing.py) ─────────────────────────────────────
