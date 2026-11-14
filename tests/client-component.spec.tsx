@@ -177,7 +177,8 @@ describe("panel status", () => {
     expect(html).toContain('data-state="attention"');
     expect(html).toContain("Needs attention"); // plain-language headline
     expect(html).toContain("See failing calls"); // one relevant action
-    expect(html).toContain("calls still failing"); // the ONE user-language split
+    expect(html).toContain("calls that failed"); // the ONE user-language split
+    expect(html).toContain("2 calls failed and were not repaired"); // lifetime, honestly labeled
     expect(html).not.toContain("failed repairs"); // jargon breakdown left the main view
     expect(html).not.toContain("unrecovered failures");
     expect(html).toContain(">8<"); // repaired count kept as evidence
@@ -216,15 +217,21 @@ describe("snapshot freshness", () => {
     expect(html).not.toContain("Connection lost");
   });
 
-  it("says connection lost when the refresh failed but saved data is shown", () => {
+  it("never claims health from a snapshot it could not refresh", () => {
     const html = renderSection(
       state({
-        stats: { ...createEmptyStats(), totalIntercepted: 3 },
+        stats: { ...createEmptyStats(), totalIntercepted: 3, healedSuccess: 3 },
         lastUpdated: Date.now() - 60_000,
         error: { source: "stats", detail: "HTTP 500" },
       }),
     );
+    // Headline: the honest stale claim, not the last-known healthy one…
+    expect(html).toContain('data-state="stale"');
+    expect(html).toContain("Showing saved data");
+    expect(html).not.toContain("Working normally");
+    // …with the meta line and the retained numbers kept below it.
     expect(html).toContain("Connection lost — showing saved data.");
+    expect(html).toContain(">3<"); // repaired count still shown as saved evidence
   });
 
   it("shows no age before the first load", () => {

@@ -2,6 +2,21 @@
 
 ## Unreleased (2026-11-14)
 
+- **Design-pass corrections: the status never overstates what it knows.**
+  (1) A snapshot the API could not refresh no longer claims health: the card
+  switches to an amber "Showing saved data" state (reason + the retained
+  numbers kept beneath as saved evidence) instead of a green headline next
+  to "Connection lost". (2) The lifetime split is honestly labeled "calls
+  that failed" with the reason "N calls failed and were not repaired." —
+  cumulative counts are no longer phrased as a present-tense condition.
+  (3) Breaker copy now matches `breaker.ts` reality: the circuit reopens
+  when failures age out of its window, so both the status card and the rule
+  note say retries resume "automatically after a cooldown", not "when calls
+  succeed again". (4) Narrow panels: the supporting metric cards pair into
+  a two-column grid under 720 px, bringing the live log into view sooner.
+  New rendered test pins the stale headline and label; harness mirrored and
+  re-verified at 460 px dark (amber accent, 2×2 grid, no overflow).
+
 - **Design pass: answer "Is Tool Doctor working, and do I need to do
   anything?" first (design recommendations 1–7).** (1) The outcome card now
   LEADS with a plain-language status — Working normally / Needs attention /
@@ -14,7 +29,7 @@
   showing saved data." (3) "Clear records" left the header for a quiet danger
   zone at the bottom of the rules, confirming by naming exactly how many
   events and counts go away (irreversible). (4) Main view speaks user
-  language: "calls repaired", "calls still failing" (one honest split =
+  language: "calls repaired", "calls that failed" (one honest split =
   Errors-tab number), "Calls checked", "Would have repaired"; shadow/breaker/
   candidate/rule ids moved into expanded details. (5) The trend now names its
   span and event count and adds a directional sentence only when ≥4 failures

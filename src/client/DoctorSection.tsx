@@ -454,13 +454,14 @@ export function candidateDomId(key: string): string {
 
 // ── Panel status: the plain answer to "is it working, must I act?" ──────────
 
-export type PanelState = "waiting" | "ok" | "attention" | "paused";
+export type PanelState = "waiting" | "ok" | "attention" | "paused" | "stale";
 
 /**
  * One headline state for the outcome card, derived in honest order of
  * severity: paused repairs (open circuit breakers) outrank unrecovered
  * failures, which outrank a clean log; an empty log waits. The repair count
- * and rate stay as evidence beneath it.
+ * and rate stay as evidence beneath it. A snapshot the API could not refresh
+ * is shown as "stale" instead — the card never claims health it last saw.
  */
 export function derivePanelState(stats: NormalizerStats): PanelState {
   if (stats.breakerOpen.length > 0) return "paused";
@@ -474,6 +475,7 @@ const STATUS_HEADLINE: Readonly<Record<PanelState, NormalizerKey>> = {
   ok: "statusOk",
   attention: "statusAttention",
   paused: "statusPaused",
+  stale: "statusStale",
 };
 
 const STATUS_DOT: Readonly<Record<PanelState, string>> = {
@@ -481,6 +483,7 @@ const STATUS_DOT: Readonly<Record<PanelState, string>> = {
   ok: styles.statusDotOk,
   attention: styles.statusDotAttention,
   paused: styles.statusDotPaused,
+  stale: styles.statusDotStale,
 };
 
 /** Coarse age of the shown snapshot, bucketed so the wording never jitters. */
@@ -614,15 +617,22 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
   }, [hasData]);
   const unrecoveredTotal = stats.healedFailed + stats.passThroughFailed;
 
-  const panelState = derivePanelState(stats);
-  const statusReason =
-    panelState === "paused"
+  const basePanelState = derivePanelState(stats);
+  // A refresh that failed over retained data outranks any health claim:
+  // the card shows saved numbers as saved numbers.
+  const staleSnapshot = state.error?.source === "stats" && hasData;
+  const panelState: PanelState = staleSnapshot ? "stale" : basePanelState;
+  const statusReason = staleSnapshot
+    ? t("statusStaleReason")
+    : basePanelState === "paused"
       ? t("statusPausedReason").replace("{n}", String(stats.breakerOpen.length))
-      : panelState === "attention"
+      : basePanelState === "attention"
         ? t("statusAttentionReason").replace("{n}", String(unrecoveredTotal))
-        : panelState === "ok"
+        : basePanelState === "ok"
           ? t("statusOkReason")
           : t("statusWaitingReason");
+  const statusActionTab: DoctorTab | null =
+    basePanelState === "paused" ? "rules" : basePanelState === "attention" ? "errors" : null;
 
   const filteredRecords = useMemo(
     () =>
@@ -908,7 +918,7 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
               <span className={styles.statusHeadline}>{t(STATUS_HEADLINE[panelState])}</span>
               <span className={styles.statusReason}>{statusReason}</span>
               <span className={styles.statusMeta}>
-                {state.error?.source === "stats" && hasData ? (
+                {staleSnapshot ? (
                   <span className={styles.statusStale}>{t("connLost")}</span>
                 ) : state.lastUpdated !== null && hasData ? (
                   (() => {
@@ -918,14 +928,13 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
                 ) : null}
               </span>
             </div>
-            {panelState === "attention" && (
-              <button type="button" className={styles.statusAction} onClick={() => controller?.setActiveTab("errors")}>
-                {t("actViewErrors")}
-              </button>
-            )}
-            {panelState === "paused" && (
-              <button type="button" className={styles.statusAction} onClick={() => controller?.setActiveTab("rules")}>
-                {t("actViewRules")}
+            {statusActionTab !== null && (
+              <button
+                type="button"
+                className={styles.statusAction}
+                onClick={() => controller?.setActiveTab(statusActionTab)}
+              >
+                {statusActionTab === "errors" ? t("actViewErrors") : t("actViewRules")}
               </button>
             )}
           </div>
@@ -949,7 +958,7 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
                 <span className={`${styles.outcomeSplitValue} ${unrecoveredTotal > 0 ? styles.kpiValueDanger : ""}`}>
                   {unrecoveredTotal}
                 </span>
-                <span className={styles.outcomeSplitLabel}>{t("outcomeStillFailing")}</span>
+                <span className={styles.outcomeSplitLabel}>{t("outcomeCallsFailed")}</span>
               </div>
             </div>
           </div>

@@ -260,6 +260,8 @@
 .outcomeCard[data-state="ok"] { border-left-color: var(--td-ok); }
 .outcomeCard[data-state="attention"] { border-left-color: var(--td-warn); }
 .outcomeCard[data-state="paused"] { border-left-color: var(--td-err); }
+/* Saved snapshot: amber — neither a health claim nor an alarm. */
+.outcomeCard[data-state="stale"] { border-left-color: var(--td-warn); }
 
 .outcomeStatus { display: flex; align-items: flex-start; gap: 12px; }
 
@@ -275,6 +277,7 @@
 .statusDotOk { background: var(--td-ok); }
 .statusDotAttention { background: var(--td-warn); }
 .statusDotPaused { background: var(--td-err); }
+.statusDotStale { background: var(--td-warn); }
 .statusDotWaiting { background: var(--td-border-strong); }
 
 .statusCopy { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
@@ -1420,7 +1423,9 @@
 /* ---- Narrow panels & motion ---- */
 
 @media (max-width: 720px) {
-  .kpiGrid, .rankGrid, .diffColumns { grid-template-columns: minmax(0, 1fr); }
+  /* Small cards pair up so the live log stays within reach on phones. */
+  .kpiGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rankGrid, .diffColumns { grid-template-columns: minmax(0, 1fr); }
   .outcomeCard { padding: 16px 17px; }
   .outcomeValue { font-size: 34px; }
   .hero { padding: 15px 16px; }

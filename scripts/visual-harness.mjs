@@ -66,7 +66,7 @@ body { margin: 0; padding: 24px; background: #ffffff; font-family: system-ui, -a
         <span class="dsh_td_statusDot dsh_td_statusDotAttention" aria-hidden="true"></span>
         <div class="dsh_td_statusCopy">
           <span class="dsh_td_statusHeadline">Needs attention</span>
-          <span class="dsh_td_statusReason">9 calls are still failing.</span>
+          <span class="dsh_td_statusReason">9 calls failed and were not repaired.</span>
           <span class="dsh_td_statusMeta"><span>Updated 2 min ago</span></span>
         </div>
         <button type="button" class="dsh_td_statusAction">See failing calls</button>
@@ -83,17 +83,17 @@ body { margin: 0; padding: 24px; background: #ffffff; font-family: system-ui, -a
         <div class="dsh_td_outcomeSplit">
           <div class="dsh_td_outcomeSplitItem">
             <span class="dsh_td_outcomeSplitValue dsh_td_kpiValueDanger">9</span>
-            <span class="dsh_td_outcomeSplitLabel">calls still failing</span>
+            <span class="dsh_td_outcomeSplitLabel">calls that failed</span>
           </div>
         </div>
       </div>
     </div>
-    <div class="dsh_td_outcomeCard" data-state="ok">
+    <div class="dsh_td_outcomeCard" data-state="stale">
       <div class="dsh_td_outcomeStatus">
-        <span class="dsh_td_statusDot dsh_td_statusDotOk" aria-hidden="true"></span>
+        <span class="dsh_td_statusDot dsh_td_statusDotStale" aria-hidden="true"></span>
         <div class="dsh_td_statusCopy">
-          <span class="dsh_td_statusHeadline">Working normally</span>
-          <span class="dsh_td_statusReason">Every recent failure was repaired before the host saw it.</span>
+          <span class="dsh_td_statusHeadline">Showing saved data</span>
+          <span class="dsh_td_statusReason">The last refresh did not reach the plugin API — these are the last saved numbers.</span>
           <span class="dsh_td_statusMeta"><span class="dsh_td_statusStale">Connection lost — showing saved data.</span></span>
         </div>
       </div>
@@ -109,7 +109,7 @@ body { margin: 0; padding: 24px; background: #ffffff; font-family: system-ui, -a
         <div class="dsh_td_outcomeSplit">
           <div class="dsh_td_outcomeSplitItem">
             <span class="dsh_td_outcomeSplitValue">0</span>
-            <span class="dsh_td_outcomeSplitLabel">calls still failing</span>
+            <span class="dsh_td_outcomeSplitLabel">calls that failed</span>
           </div>
         </div>
       </div>
@@ -306,7 +306,7 @@ body { margin: 0; padding: 24px; background: #ffffff; font-family: system-ui, -a
           <p class="dsh_td_kpiDesc">Retries a failed edit with whitespace-normalized matching.</p>
           <details class="dsh_td_ruleDetails">
             <summary>Recent activity</summary>
-            <p class="dsh_td_rulePausedNote">Retries are paused after repeated failures. The rule resumes automatically once calls succeed again.</p>
+            <p class="dsh_td_rulePausedNote">Retries are paused after repeated failures. This rule resumes automatically after a cooldown.</p>
             <p class="dsh_td_ruleDetailLine">14 events <span class="dsh_td_catFailed">· 5 failed</span></p>
             <p class="dsh_td_ruleIdLine">autoFuzzyEdit · FS_WHITESPACE</p>
           </details>
@@ -392,7 +392,7 @@ body { margin: 0; padding: 24px; background: #ffffff; font-family: system-ui, -a
           </span>
         </div>
         <div class="dsh_td_outcomeSplit">
-          <div class="dsh_td_outcomeSplitItem"><span class="dsh_td_outcomeSplitValue">0</span><span class="dsh_td_outcomeSplitLabel">calls still failing</span></div>
+          <div class="dsh_td_outcomeSplitItem"><span class="dsh_td_outcomeSplitValue">0</span><span class="dsh_td_outcomeSplitLabel">calls that failed</span></div>
         </div>
       </div>
     </div>

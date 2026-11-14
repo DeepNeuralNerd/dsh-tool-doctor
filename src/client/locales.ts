@@ -56,10 +56,13 @@ export const en = {
   statusOk: "Working normally",
   statusOkReason: "Every recent failure was repaired before the host saw it.",
   statusAttention: "Needs attention",
-  statusAttentionReason: "{n} calls are still failing.",
+  statusAttentionReason: "{n} calls failed and were not repaired.",
   statusPaused: "Repairs temporarily paused",
   statusPausedReason:
-    "{n} repair types are paused after repeated failures. They resume on their own when calls succeed again.",
+    "{n} repair types are paused after repeated failures. Retries resume automatically after a cooldown.",
+  statusStale: "Showing saved data",
+  statusStaleReason:
+    "The last refresh did not reach the plugin API — these are the last saved numbers.",
   actViewErrors: "See failing calls",
   actViewRules: "Review paused repairs",
   connLost: "Connection lost — showing saved data.",
@@ -72,7 +75,7 @@ export const en = {
   outcomeTitle: "Repairs",
   outcomeRepairedNote: "successful repairs —",
   outcomeRepairedCaption: "calls repaired",
-  outcomeStillFailing: "calls still failing",
+  outcomeCallsFailed: "calls that failed",
   kpiRateSuffix: "of repair attempts succeeded.",
   outcomeFailedRepairs: "failed repairs",
   outcomePassThroughFailed: "unrecovered failures",
@@ -102,7 +105,7 @@ export const en = {
   // Per-rule disclosure & paused state
   rulePausedChip: "Repairs paused",
   rulePausedNote:
-    "Retries are paused after repeated failures. The rule resumes automatically once calls succeed again.",
+    "Retries are paused after repeated failures. This rule resumes automatically after a cooldown.",
   ruleDetailsToggle: "Recent activity",
 
   // Clearing durable history (bottom of rules)
