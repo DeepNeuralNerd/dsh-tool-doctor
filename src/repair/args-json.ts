@@ -34,8 +34,38 @@ function isWrapperKey(key: string): boolean {
   return SINGLE_KEY_WRAPPERS.has(key.toLowerCase());
 }
 
+/**
+ * Drop commas that only precede a closing `}`/`]`. STRING-AWARE: a scanner
+ * walks the text and never edits inside a quoted string (escape-respecting),
+ * so `{"text":"x,}","count":1,}` loses only the structural comma — the naive
+ * regex also matched `,"`-free commas inside strings and corrupted content.
+ */
 function stripTrailingCommas(input: string): string {
-  return input.replace(/,\s*([}\]])/g, "$1");
+  let out = "";
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+    if (inString) {
+      out += ch;
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      out += ch;
+      continue;
+    }
+    if (ch === ",") {
+      let j = i + 1;
+      while (j < input.length && /\s/.test(input[j])) j++;
+      if (input[j] === "}" || input[j] === "]") continue; // structural comma: drop
+    }
+    out += ch;
+  }
+  return out;
 }
 
 function stripMarkdownFences(input: string): string | undefined {

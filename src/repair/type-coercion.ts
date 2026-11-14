@@ -81,8 +81,20 @@ function coerceProperty(
   let coerced: unknown = rawValue;
   let changed = false;
 
-  // Handle union types (ARRAY of types containing "string" or "number")
+  // Handle union types (ARRAY of types)
   if (Array.isArray(declaredType)) {
+    // A string value already satisfies any union that admits "string" —
+    // coercing it anyway ("42" → 42 under ["string","number"]) would REWRITE
+    // a schema-valid argument. Rule 9 doctrine: only touch what is invalid.
+    // Sole exception: the documented null-sentinel convention still applies
+    // to nullable unions ("null" → real null), so that path falls through.
+    const unionTypes = declaredType as readonly unknown[];
+    if (unionTypes.includes("string")) {
+      const isSentinel = trimmed.toLowerCase() === "null" || trimmed.toLowerCase() === "undefined";
+      if (!(unionTypes.includes("null") && isSentinel)) {
+        return [rawValue, false];
+      }
+    }
     for (const t of declaredType) {
       const [result, isChanged] = coercePropertyForType(t as string, propSchema, trimmed);
       if (isChanged && coerced === rawValue) {
@@ -118,19 +130,28 @@ function coercePropertyForType(
   switch (declaredType) {
     case "number":
       // Trimmed string matches /^-?\d+(\.\d+)?$/ → Number(value). Reject "", "42px", "1,000".
+      // Integral literals must stay exactly representable: "9007199254740993"
+      // would silently coerce to 9007199254740992, and a coerced-but-wrong
+      // number is worse than an honest type error (the host retries).
       if (/^-?\d+(\.\d+)?$/.test(trimmedValue)) {
         const num = Number(trimmedValue);
-        coerced = num;
-        changed = true;
+        const lossless = trimmedValue.includes(".") || Number.isSafeInteger(num);
+        if (lossless) {
+          coerced = num;
+          changed = true;
+        }
       }
       break;
 
     case "integer":
-      // Trimmed string matches /^-?\d+$/ → Number(value).
+      // Trimmed string matches /^-?\d+$/ → Number(value), but only while the
+      // integer survives the double exactly (same no-silent-precision-loss bar).
       if (/^-?\d+$/.test(trimmedValue)) {
         const int = Number(trimmedValue);
-        coerced = int;
-        changed = true;
+        if (Number.isSafeInteger(int)) {
+          coerced = int;
+          changed = true;
+        }
       }
       break;
 

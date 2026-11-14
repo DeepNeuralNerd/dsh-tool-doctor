@@ -284,9 +284,10 @@ describe("type-coercion", () => {
         },
       };
 
-      // Number rule applies first and succeeds
+      // Reviewer round correction: member ORDER no longer decides — a string
+      // value already satisfies the union, so it is preserved untouched.
       const result = coerceArgTypes("numStringUnionDef", { field: "42" }, numStringUnionDef);
-      expect(result?.args.field).toBe(42);
+      expect(result).toBeUndefined();
     });
   });
 
@@ -445,6 +446,45 @@ describe("type-coercion", () => {
 
     it('leaves "null" untouched for a plain (non-nullable) string field', () => {
       expect(coerceArgTypes("t", { label: "null" }, nullableDef)).toBeUndefined();
+    });
+  });
+
+  // Reviewer round (2026-11-14): a value that already satisfies the schema
+  // must never be rewritten, and a coercion must not lose precision silently.
+  describe("union-string preservation and precision guards", () => {
+    const unionDef = (type: unknown) => ({ inputSchema: { properties: { v: { type } } } });
+
+    it('keeps "42" for a ["string","number"] union — the string is already valid', () => {
+      expect(coerceArgTypes("t", { v: "42" }, unionDef(["string", "number"]))).toBeUndefined();
+    });
+
+    it("keeps it regardless of union member order", () => {
+      expect(coerceArgTypes("t", { v: "42" }, unionDef(["number", "string"]))).toBeUndefined();
+    });
+
+    it("still coerces when the union does NOT admit string", () => {
+      const result = coerceArgTypes("t", { v: "42" }, unionDef(["number", "boolean"]));
+      expect((result!.args as Record<string, unknown>).v).toBe(42);
+    });
+
+    it("rejects an integer coercion that would lose precision", () => {
+      expect(coerceArgTypes("t", { v: "9007199254740993" }, unionDef("integer"))).toBeUndefined();
+    });
+
+    it("still coerces an exactly representable large integer", () => {
+      // Number.MAX_SAFE_INTEGER (2^53 − 1) is the last exact double integer.
+      const result = coerceArgTypes("t", { v: "9007199254740991" }, unionDef("integer"));
+      expect((result!.args as Record<string, unknown>).v).toBe(9007199254740991);
+    });
+
+    it("also rejects 2^53 itself (not a safe integer)", () => {
+      expect(coerceArgTypes("t", { v: "9007199254740992" }, unionDef("integer"))).toBeUndefined();
+    });
+
+    it("applies the same precision bar to number-typed integral literals", () => {
+      expect(coerceArgTypes("t", { v: "9007199254740993" }, unionDef("number"))).toBeUndefined();
+      const result = coerceArgTypes("t", { v: "3.5" }, unionDef("number"));
+      expect((result!.args as Record<string, unknown>).v).toBe(3.5);
     });
   });
 });

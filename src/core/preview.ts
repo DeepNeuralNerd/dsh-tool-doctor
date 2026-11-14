@@ -15,8 +15,14 @@ const PREVIEW_LIMIT = 180;
 const ELLIPSIS = " … ";
 const REDACTED = "[redacted]";
 
-/** One `"key": "value"` JSON pair (string values only). */
-const JSON_STRING_PAIR_RE = /("(?:[^"\\]|\\.)*")(\s*:\s*)("(?:[^"\\]|\\.)*")/g;
+/**
+ * One `"key": value` JSON pair with a literal scalar value: string, number,
+ * or boolean. Numbers included deliberately — a numeric PIN or secret like
+ * `{"password":12345678}` is exactly what leaks through a strings-only
+ * regex. `null` carries no secret, so it stays untouched.
+ */
+const JSON_PAIR_RE =
+  /("(?:[^"\\]|\\.)*")(\s*:\s*)("(?:[^"\\]|\\.)*"|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false)/g;
 
 /** Key segments that mark a value as sensitive, compared after lowercasing. */
 const SECRET_KEY_SEGMENTS: ReadonlySet<string> = new Set([
@@ -85,7 +91,7 @@ function isSecretFlag(flag: string): boolean {
 export function redactSensitive(text: string): string {
   if (text.length === 0) return text;
   let out = text.replace(
-    JSON_STRING_PAIR_RE,
+    JSON_PAIR_RE,
     (pair, keyJson: string, sep: string, _valueJson: string) =>
       isSecretKey(keyJson) ? `${keyJson}${sep}"${REDACTED}"` : pair,
   );

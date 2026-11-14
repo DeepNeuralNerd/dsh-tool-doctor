@@ -123,4 +123,27 @@ describe("repairArgsPayload", () => {
     expect(result?.changes).not.toBeNull();
     expect(result?.changes.length).toBeGreaterThan(0);
   });
+
+  // Reviewer round (2026-11-14): trailing-comma stripping must never touch
+  // string CONTENT — the old regex rewrote "x,}" to "x}".
+  describe("string-aware trailing-comma stripping", () => {
+    it("keeps a string containing ,} while dropping the structural comma", () => {
+      const result = repairArgsPayload('{"text":"x,}","count":1,}');
+      const args = result!.args as Record<string, unknown>;
+      expect(args.text).toBe("x,}");
+      expect(args.count).toBe(1);
+    });
+
+    it("keeps commas inside strings beside a trailing-comma array", () => {
+      const result = repairArgsPayload('{"list":[1,2,],"note":"a, b, c,"}');
+      const args = result!.args as Record<string, unknown>;
+      expect(args.list).toEqual([1, 2]);
+      expect(args.note).toBe("a, b, c,");
+    });
+
+    it("respects escaped quotes inside the string while scanning", () => {
+      const result = repairArgsPayload('{"q":"say \\"hi,}\\" end",}');
+      expect((result!.args as Record<string, unknown>).q).toBe('say "hi,}" end');
+    });
+  });
 });

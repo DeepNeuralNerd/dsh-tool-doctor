@@ -2,6 +2,23 @@
 
 ## Unreleased (2026-11-14)
 
+- **Reviewer round (2nd): five correctness fixes, each with a pinning
+  regression test.** (1) Trailing-comma stripping in the argument-JSON
+  recovery is now a string-aware scanner — `{"text":"x,}","count":1,}`
+  keeps its string content (the old regex corrupted it to `x}`).
+  (2) A string value under a union schema that admits `"string"` is
+  preserved (`"42"` no longer rewrites to `42` under
+  `["string","number"]`); the null-sentinel convention for nullable
+  unions still applies. (3) `~` expansion only happens when the plugin
+  process's home matches the session world's path style — a Windows
+  harness driving a POSIX session now leaves `~/notes` untouched instead
+  of rewriting it into the plugin user's directory. (4) Integer/number
+  coercion requires `Number.isSafeInteger` — `9007199254740993` is left
+  as a string rather than silently landing on `…992`. (5) Preview
+  redaction covers non-string JSON values: `{"password":12345678}` is
+  masked like any other secret (and `preview.ts` gained its first test
+  suite).
+
 - **Guarded client mirror**: the dashboard's taxonomy tables and
   candidate-fix logic moved from `DoctorSection.tsx` to
   `src/client/mirror.ts` (pure, React-free), typed as `Record` over

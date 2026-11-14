@@ -3,7 +3,10 @@
  *
  * Two lossless rewrites, no I/O:
  *  - Tilde expansion: a leading `~` (or `~/` / `~\`) expands to os.homedir(),
- *    with the remainder converted to the host's native separators.
+ *    with the remainder converted to the host's native separators — but only
+ *    when the home's style matches the session world's style. A POSIX-style
+ *    session whose cwd is unknown to this process keeps its `~` untouched:
+ *    the plugin machine's home would be the WRONG answer.
  *  - Separator normalization: on a POSIX session only, backslashes in a path
  *    value are rewritten to "/" (backslash drift from a Windows-trained model
  *    is the common case; POSIX filenames virtually never contain one).
@@ -45,6 +48,26 @@ function nativeSeparators(rest: string, isWindowsHost: boolean): string {
 }
 
 /**
+ * This process's home directory, but only when it can be TRUSTED for the
+ * session world: a Windows harness driving a POSIX (remote/container) session
+ * has a home the session would never resolve `~` to. The session's style is
+ * the test — same style means same machine as far as we can tell; a mismatch
+ * means the session's home is unknown and `~` must stay untouched (the tool
+ * itself, running in the session world, will resolve or reject it honestly).
+ */
+function trustedHome(isWindowsHost: boolean): string | undefined {
+  let home: string;
+  try {
+    home = os.homedir();
+  } catch {
+    return undefined;
+  }
+  if (typeof home !== "string" || home.length === 0) return undefined;
+  const homeIsWindows = /^[a-zA-Z]:[\\/]/.test(home) || home.startsWith("\\\\");
+  return homeIsWindows === isWindowsHost ? home : undefined;
+}
+
+/**
  * Normalize separator style and `~` prefixes in path arguments.
  * @param toolName - The dispatched tool name (reserved; shape rules are tool-agnostic).
  * @param rawArgs - Raw model arguments.
@@ -71,10 +94,14 @@ export function normalizePathShapes(
     let label: string | undefined;
 
     if (out === "~" || out.startsWith("~/") || out.startsWith("~\\")) {
-      // Tilde expansion; the remainder joins the home directory in native form.
-      const rest = nativeSeparators(out.slice(1), isWindowsHost);
-      out = `${os.homedir()}${rest}`;
-      label = CHANGE_TILDE;
+      // Tilde expansion — only over a home trusted for this session world
+      // (see trustedHome); otherwise the value passes through unchanged.
+      const home = trustedHome(isWindowsHost);
+      if (home !== undefined) {
+        const rest = nativeSeparators(out.slice(1), isWindowsHost);
+        out = `${home}${rest}`;
+        label = CHANGE_TILDE;
+      }
     } else if (!isWindowsHost && out.includes("\\")) {
       // POSIX session: backslashes in a path are separator drift.
       out = out.replace(/\\/g, "/");
