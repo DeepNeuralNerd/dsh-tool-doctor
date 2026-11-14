@@ -254,3 +254,96 @@ describe("adapter — config route", () => {
     expect(getJson(routes, "/plugin-api/tool-doctor/stats").totalIntercepted).toBe(0);
   });
 });
+
+// Promotion duplicate guard (second review round, 2026-11-14): a native
+// tool-call anywhere in the message vetoes its promoted text twin — the
+// Qwen3 parser report's duplicate-call class. Tests use the tag-free
+// [ARGS] markup shape on purpose.
+describe("adapter — promotion duplicate guard (stream hook)", () => {
+  const MARKUP = 'Loading: read[ARGS]{"file_path":"a.txt"}';
+
+  async function driveStream(
+    hooks: Map<string, RouteHandler>,
+    chunks: unknown[],
+  ): Promise<Array<Record<string, unknown>>> {
+    const stream = hooks.get("llm/stream") as unknown as (
+      options: unknown,
+      next: () => AsyncIterable<unknown>,
+    ) => AsyncIterable<unknown>;
+    async function* source() {
+      for (const c of chunks) yield c;
+    }
+    const out: Array<Record<string, unknown>> = [];
+    for await (const chunk of stream({ tools: [{ name: "read" }] }, source)) {
+      out.push(chunk as Record<string, unknown>);
+    }
+    return out;
+  }
+
+  const textChunk = (text: string) => ({
+    type: "block-end",
+    index: 0,
+    block: { type: "text", text },
+  });
+  const nativeChunk = (name: string, args: string) => ({
+    type: "block-end",
+    index: 1,
+    block: { type: "tool-call", id: "native-1", name, arguments: args },
+  });
+  const healDeltas = (out: Array<Record<string, unknown>>) =>
+    out.filter(
+      (e) =>
+        e.type === "tool-call-delta" &&
+        typeof e.id === "string" &&
+        String(e.id).startsWith("heal_"),
+    );
+
+  it("suppresses a promoted twin of a native call (native first)", async () => {
+    const { ctx, hooks } = makeBundle();
+    apply(ctx, {});
+    const out = await driveStream(hooks, [nativeChunk("read", '{"file_path":"a.txt"}'), textChunk(MARKUP)]);
+    expect(healDeltas(out)).toHaveLength(0);
+  });
+
+  it("suppresses the twin when the native call arrives AFTER the markup", async () => {
+    const { ctx, hooks } = makeBundle();
+    apply(ctx, {});
+    const out = await driveStream(hooks, [textChunk(MARKUP), nativeChunk("read", '{"file_path":"a.txt"}')]);
+    expect(healDeltas(out)).toHaveLength(0);
+  });
+
+  it("matches the twin canonically (key order and whitespace irrelevant)", async () => {
+    const { ctx, hooks } = makeBundle();
+    apply(ctx, {});
+    const out = await driveStream(hooks, [
+      nativeChunk("read", '{"mode":"r","file_path":"a.txt"}'),
+      textChunk('read[ARGS]{"file_path":"a.txt","mode":"r"}'),
+    ]);
+    expect(healDeltas(out)).toHaveLength(0);
+  });
+
+  it("promotes when no native call exists (control)", async () => {
+    const { ctx, hooks } = makeBundle();
+    apply(ctx, {});
+    const out = await driveStream(hooks, [textChunk(MARKUP)]);
+    expect(healDeltas(out)).toHaveLength(1);
+  });
+
+  it("promotes when the native call has different arguments", async () => {
+    const { ctx, hooks } = makeBundle();
+    apply(ctx, {});
+    const out = await driveStream(hooks, [nativeChunk("read", '{"file_path":"other.txt"}'), textChunk(MARKUP)]);
+    expect(healDeltas(out)).toHaveLength(1);
+  });
+
+  it("re-emits the healed text block with the markup stripped", async () => {
+    const { ctx, hooks } = makeBundle();
+    apply(ctx, {});
+    const out = await driveStream(hooks, [textChunk(MARKUP)]);
+    const textEnd = out.find(
+      (e) => e.type === "block-end" && (e.block as { type?: string } | undefined)?.type === "text",
+    );
+    expect(textEnd).toBeDefined();
+    expect(((textEnd as { block: { text: string } }).block).text).not.toContain("[ARGS]");
+  });
+});

@@ -487,4 +487,148 @@ describe("type-coercion", () => {
       expect((result!.args as Record<string, unknown>).v).toBe(3.5);
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // $ref-declared properties — second review round (2026-11-14). Evidence
+  // (vLLM serving stack): nested objects arrive as JSON strings exactly when
+  // the property uses $ref. Narrow gate: local + acyclic + depth-capped;
+  // string→object/array ONLY; whole-value strict parse; no duplicate names.
+  describe("$ref-declared properties", () => {
+    const refDef = (properties: Record<string, unknown>, extra?: Record<string, unknown>) => ({
+      name: "t",
+      inputSchema: { type: "object" as const, properties, ...(extra ?? {}) },
+    });
+
+    it("coerces a stringified object for a $ref-declared object property", () => {
+      const def = refDef(
+        { config: { $ref: "#/$defs/Widget" } },
+        { $defs: { Widget: { type: "object", properties: { a: { type: "number" } } } } },
+      );
+      const result = coerceArgTypes("t", { config: '{"a":1}' }, def);
+      expect(result).toBeDefined();
+      expect(result!.args.config).toEqual({ a: 1 });
+      expect(result!.changes).toContain("field config coerced to object (via $ref)");
+    });
+
+    it("coerces a stringified array for a $ref-declared array property", () => {
+      const def = refDef(
+        { items: { $ref: "#/$defs/List" } },
+        { $defs: { List: { type: "array" } } },
+      );
+      const result = coerceArgTypes("t", { items: '[1,"b"]' }, def);
+      expect(result!.args.items).toEqual([1, "b"]);
+      expect(result!.changes).toContain("field items coerced to array (via $ref)");
+    });
+
+    it("resolves the legacy #/definitions pointer location too", () => {
+      const def = refDef(
+        { cfg: { $ref: "#/definitions/Cfg" } },
+        { definitions: { Cfg: { type: "object" } } },
+      );
+      const result = coerceArgTypes("t", { cfg: '{"k":true}' }, def);
+      expect(result!.args.cfg).toEqual({ k: true });
+    });
+
+    it("decodes JSON-Pointer escapes (~1) in the ref target", () => {
+      const def = refDef(
+        { cfg: { $ref: "#/$defs/weird~1name" } },
+        { $defs: { "weird/name": { type: "object" } } },
+      );
+      const result = coerceArgTypes("t", { cfg: '{"a":1}' }, def);
+      expect(result!.args.cfg).toEqual({ a: 1 });
+    });
+
+    it("accepts a union target that includes object", () => {
+      const def = refDef(
+        { cfg: { $ref: "#/$defs/Maybe" } },
+        { $defs: { Maybe: { type: ["object", "null"] } } },
+      );
+      const result = coerceArgTypes("t", { cfg: '{"a":1}' }, def);
+      expect(result!.args.cfg).toEqual({ a: 1 });
+    });
+
+    it("never activates number/bool coercion through a $ref (narrow gate)", () => {
+      const def = refDef(
+        { v: { $ref: "#/$defs/Num" } },
+        { $defs: { Num: { type: "number" } } },
+      );
+      expect(coerceArgTypes("t", { v: "42" }, def)).toBeUndefined();
+    });
+
+    it("leaves a string-target $ref value alone even if it looks like JSON", () => {
+      const def = refDef(
+        { v: { $ref: "#/$defs/Str" } },
+        { $defs: { Str: { type: "string" } } },
+      );
+      expect(coerceArgTypes("t", { v: '{"a":1}' }, def)).toBeUndefined();
+    });
+
+    it("requires the WHOLE value to parse: trailing text abstains", () => {
+      const def = refDef(
+        { cfg: { $ref: "#/$defs/Cfg" } },
+        { $defs: { Cfg: { type: "object" } } },
+      );
+      expect(coerceArgTypes("t", { cfg: '{"a":1} tail' }, def)).toBeUndefined();
+    });
+
+    it("abstains on the duplicated-object streaming shape (two adjacent objects)", () => {
+      // The vLLM `{"x":1}{"x":1}` envelope is NOT guessed here — JSON.parse
+      // rejects the tail, so the narrow $ref gate passes it through.
+      const def = refDef(
+        { cfg: { $ref: "#/$defs/Cfg" } },
+        { $defs: { Cfg: { type: "object" } } },
+      );
+      expect(coerceArgTypes("t", { cfg: '{"a":1}{"a":1}' }, def)).toBeUndefined();
+    });
+
+    it("abstains on duplicate member names inside the value text (RFC 8259 bar)", () => {
+      const def = refDef(
+        { cfg: { $ref: "#/$defs/Cfg" } },
+        { $defs: { Cfg: { type: "object" } } },
+      );
+      expect(coerceArgTypes("t", { cfg: '{"a":1,"a":2}' }, def)).toBeUndefined();
+    });
+
+    it("abstains on remote refs and bare-# refs", () => {
+      expect(
+        coerceArgTypes("t", { cfg: '{"a":1}' }, refDef({ cfg: { $ref: "schemas.json#/defs/X" } })),
+      ).toBeUndefined();
+      expect(coerceArgTypes("t", { cfg: '{"a":1}' }, refDef({ cfg: { $ref: "#" } }))).toBeUndefined();
+    });
+
+    it("abstains on cyclic ref chains instead of looping", () => {
+      const def = refDef(
+        { cfg: { $ref: "#/$defs/A" } },
+        { $defs: { A: { $ref: "#/$defs/B" }, B: { $ref: "#/$defs/A" } } },
+      );
+      expect(coerceArgTypes("t", { cfg: '{"a":1}' }, def)).toBeUndefined();
+    });
+
+    it("caps long ref chains (depth limit, not depth preference)", () => {
+      const defs: Record<string, unknown> = {};
+      for (let i = 0; i < 9; i++) defs[`X${i}`] = { $ref: `#/$defs/X${i + 1}` };
+      defs.X9 = { type: "object" };
+      const def = refDef({ cfg: { $ref: "#/$defs/X0" } }, { $defs: defs });
+      expect(coerceArgTypes("t", { cfg: '{"a":1}' }, def)).toBeUndefined();
+    });
+
+    it("inline type still wins over a sibling $ref", () => {
+      const def = refDef(
+        { cfg: { type: "object", $ref: "#/$defs/NotUsed" } },
+        { $defs: { NotUsed: { type: "number" } } },
+      );
+      const result = coerceArgTypes("t", { cfg: '{"a":1}' }, def);
+      expect(result!.args.cfg).toEqual({ a: 1 });
+      expect(result!.changes).toContain("field cfg coerced to object");
+      expect(result!.changes.join("")).not.toContain("via $ref");
+    });
+
+    it("leaves an already-object value untouched", () => {
+      const def = refDef(
+        { cfg: { $ref: "#/$defs/Cfg" } },
+        { $defs: { Cfg: { type: "object" } } },
+      );
+      expect(coerceArgTypes("t", { cfg: { a: 1 } }, def)).toBeUndefined();
+    });
+  });
 });

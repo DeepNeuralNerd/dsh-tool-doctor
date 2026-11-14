@@ -7,6 +7,31 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- **`$ref`-declared properties get the narrowest coercion (rule 9 family 1).**
+  A vLLM serving-stack report reproduces nested objects arriving as JSON
+  strings exactly when the property uses `$ref` (the inline equivalent
+  works); the plugin's schema reader previously ignored `$ref` entirely, so
+  those properties were invisible to type coercion. A property declared ONLY
+  via a local, acyclic `$ref` now coerces string→object/array — whole-value
+  strict parse, duplicate-member-name guard included, no number/bool/enum
+  coercion ever activated through a pointer. Insurance by construction: no
+  built-in DSH tool uses `$ref`; the class arrives with MCP-served schemas.
+  Fifteen tests added.
+
+- **Promotion duplicate guard: a native call vetoes its text twin.** The
+  Qwen3 parser report's duplicate-call class: a message carrying both a
+  structured tool-call and the same call emitted as markup text used to
+  dispatch twice. The stream hook now records native call identities
+  (name + canonical key-sorted arguments) across the whole message and
+  drops promoted twins at stream end — suppression works in either order;
+  the stripped text still re-emits at its original position. Six tests.
+
+- **Guard G6: example-bracketed markup stays text.** Quoted or parenthesized
+  samples of tool-call markup in prose ("…`<function=read>…`…" class,
+  Qwen3 parser report) are no longer promoted — both an example opener
+  directly before AND a closer directly after must match; one-sided
+  punctuation never suppresses a real call. Eight parser tests.
+
 - **Ambiguous-payload guard: duplicate JSON member names are never adopted.**
   RFC 8259 §4 warns that repeated names produce unpredictable interoperability
   behavior; `JSON.parse` resolves them silently (last value wins), so a

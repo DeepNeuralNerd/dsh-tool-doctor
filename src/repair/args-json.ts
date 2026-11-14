@@ -104,9 +104,10 @@ function extractJsonObjectFromProse(input: string): string | undefined {
  * a string inside an OBJECT scope counts as a member name iff the next
  * non-whitespace character is ':'. Raw-name comparison is conservative — two
  * differently-escaped spellings of one name are a MISSED duplicate, never a
- * false alarm.
+ * false alarm. Exported for reuse by the type-coercion $ref path (same RFC
+ * 8259 bar on any adopted JSON text).
  */
-function hasDuplicateMemberNames(input: string): boolean {
+export function hasDuplicateMemberNames(input: string): boolean {
   const scopes: Array<Set<string>> = [];
   const n = input.length;
   let i = 0;

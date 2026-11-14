@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  canonicalCallArgs,
   hasHealSignal,
   healGate,
   healTextBlock,
@@ -289,5 +290,70 @@ describe("healTextBlock — stream-hook transform (R2/R4)", () => {
     const ids = [...a.calls, ...b.calls].map((c) => c.id);
     expect(new Set(ids).size).toBe(ids.length); // no collisions across blocks
     expect(ids).not.toContain("call_0");        // never collides with native ids
+  });
+});
+
+// G6 — example-bracketed markup stays TEXT (second review round, 2026-11-14;
+// Qwen3 parser report: quoted examples read as executable calls).
+describe("G6 — quoted examples are data, not calls", () => {
+  it("suppresses a double-quoted <function=…> example", () => {
+    const text =
+      'Use "<function=read><parameter=file_path>a.txt</parameter></function>" to load a file.';
+    expect(parseToolCallsFromText(text, allow("read"))).toHaveLength(0);
+  });
+
+  it("suppresses a curly-quoted tool_call example", () => {
+    const text =
+      'the model says “<tool_call>{"name":"read","arguments":{}}</tool_call>”';
+    expect(parseToolCallsFromText(text, allow("read"))).toHaveLength(0);
+  });
+
+  it("suppresses a parenthesized example", () => {
+    const text = '(<tool_call>{"name":"read","arguments":{"file_path":"a.txt"}}</tool_call>)';
+    expect(parseToolCallsFromText(text, allow("read"))).toHaveLength(0);
+  });
+
+  it("still promotes the same call unquoted (control)", () => {
+    const text = '<function=read><parameter=file_path>a.txt</parameter></function>';
+    expect(parseToolCallsFromText(text, allow("read"))).toHaveLength(1);
+  });
+
+  it("a real call followed by a period is not an example (one-sided never suppresses)", () => {
+    const text = 'Loading now.\n<tool_call>{"name":"read","arguments":{}}</tool_call>.';
+    expect(parseToolCallsFromText(text, allow("read"))).toHaveLength(1);
+  });
+
+  it("a real call preceded by a colon is not an example", () => {
+    const text = 'Call it: <function=read><parameter=file_path>a.txt</parameter></function>';
+    expect(parseToolCallsFromText(text, allow("read"))).toHaveLength(1);
+  });
+
+  it("Mistral array tiling is unaffected (brackets are not example quotes)", () => {
+    const text =
+      '[TOOL_CALLS][{"name":"read","arguments":{"file_path":"a"}},{"name":"read","arguments":{"file_path":"b"}}]';
+    expect(parseToolCallsFromText(text, allow("read"))).toHaveLength(2);
+  });
+
+  it("glued bodies inside one tool_call marker are unaffected", () => {
+    const text =
+      '<tool_call>{"name":"read","arguments":{"f":"a"}}{"name":"read","arguments":{"f":"b"}}</tool_call>';
+    expect(parseToolCallsFromText(text, allow("read"))).toHaveLength(2);
+  });
+});
+
+describe("canonicalCallArgs", () => {
+  it("ignores key order and whitespace", () => {
+    expect(canonicalCallArgs('{"b":1,"a":2}')).toBe(canonicalCallArgs({ a: 2, b: 1 }));
+  });
+
+  it("recurses into nested objects and arrays", () => {
+    expect(canonicalCallArgs('{"o":{"b":[1,{"d":4,"c":3}]},"a":0}')).toBe(
+      canonicalCallArgs({ a: 0, o: { b: [1, { c: 3, d: 4 }] } }),
+    );
+  });
+
+  it("unparseable strings canonicalize to themselves", () => {
+    expect(canonicalCallArgs("not json")).toBe("not json");
+    expect(canonicalCallArgs("not json")).not.toBe(canonicalCallArgs("also not json"));
   });
 });

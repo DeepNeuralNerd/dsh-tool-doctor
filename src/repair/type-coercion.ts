@@ -16,9 +16,17 @@
  *    came in as a bare primitive AND the tool is known to require strings —
  *    deliberately NOT applied by default; see tests)
  *  - "null"/"undefined" sentinel strings → null, only for nullable fields
+ *  - $ref-declared properties (2026-11-14, second review round): a property
+ *    declared ONLY via a local, acyclic $ref coerces string→object/array and
+ *    nothing else — whole-value strict parse, no duplicate member names, no
+ *    comma-list fallback. Motivation: a vLLM serving-stack report reproduces
+ *    nested objects arriving as JSON strings exactly when the property uses
+ *    $ref (inline equivalent works); the host remains the success authority.
  *
  * @module dsh-tool-doctor/repair/type-coercion
  */
+
+import { hasDuplicateMemberNames } from "./args-json.ts";
 
 /** Outcome of a successful coercion pass. */
 export interface TypeCoercionResult {
@@ -57,6 +65,60 @@ export function extractSchema(def: unknown): { type?: string; properties?: Recor
  */
 function isPlainObject(value: unknown): boolean {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Hard cap on $ref chains; longer than this, the schema abstains by design. */
+const REF_CHAIN_LIMIT = 8;
+
+/** Decode one JSON-Pointer segment (`~1` → `/`, `~0` → `~`). */
+function decodePointerSegment(segment: string): string {
+  return segment.replace(/~1/g, "/").replace(/~0/g, "~");
+}
+
+/**
+ * Resolve a LOCAL JSON-Pointer $ref (`#/$defs/X`, `#/definitions/X`) against
+ * the root schema. Anything else — remote documents, bare `#`, malformed
+ * pointers — resolves to undefined. Purely local: no I/O, ever.
+ */
+function resolveLocalRefPointer(root: unknown, ref: unknown): unknown {
+  if (typeof ref !== "string" || !ref.startsWith("#/") || ref.length <= 2) return undefined;
+  let node: unknown = root;
+  for (const rawSeg of ref.slice(2).split("/")) {
+    const seg = decodePointerSegment(rawSeg);
+    if (Array.isArray(node)) {
+      const idx = Number(seg);
+      if (!Number.isInteger(idx) || idx < 0 || idx >= node.length) return undefined;
+      node = node[idx];
+    } else if (isPlainObject(node)) {
+      if (!(seg in (node as Record<string, unknown>))) return undefined;
+      node = (node as Record<string, unknown>)[seg];
+    } else {
+      return undefined;
+    }
+  }
+  return node;
+}
+
+/**
+ * Follow a property's $ref chain until a node DECLARES a type. Local pointers
+ * only; a visited-set makes reference CYCLES resolve to undefined instead of
+ * looping, and the chain length is capped regardless. A node carrying both an
+ * inline type and a $ref returns immediately (inline wins — existing shapes
+ * keep their exact pre-$ref behavior).
+ */
+function derefProperty(root: unknown, propSchema: Record<string, unknown>): Record<string, unknown> | undefined {
+  let node: unknown = propSchema;
+  const visited = new Set<string>();
+  for (let hop = 0; hop < REF_CHAIN_LIMIT; hop++) {
+    if (!isPlainObject(node)) return undefined;
+    const rec = node as Record<string, unknown>;
+    if (typeof rec.type === "string" || Array.isArray(rec.type)) return rec;
+    const ref = rec.$ref;
+    if (typeof ref !== "string" || visited.has(ref)) return undefined;
+    visited.add(ref);
+    node = resolveLocalRefPointer(root, ref);
+  }
+  return undefined;
 }
 
 /**
@@ -295,7 +357,43 @@ export function coerceArgTypes(
     if (rawValue === undefined || rawValue === null) continue;
 
     // Extract the actual type declaration from the property schema
-    const declaredType = (propSchema as Record<string, unknown>).type;
+    const propRec = propSchema as Record<string, unknown>;
+    let declaredType: unknown = propRec.type;
+
+    // $ref-declared property (no inline type): resolve locally, then apply
+    // the NARROW gate only — string→object/array on a whole-value strict
+    // parse with no duplicate member names. No number/bool/enum/sentinel
+    // coercion is ever activated through a $ref (second review round
+    // doctrine: the evidence class is stringified nested objects; anything
+    // broader would let a resolved pointer widen the repair surface).
+    if (declaredType === undefined && typeof propRec.$ref === "string") {
+      const refTarget = derefProperty(schema, propRec);
+      if (refTarget) {
+        const refType = refTarget.type;
+        const want = Array.isArray(refType) ? (refType as readonly unknown[]) : [refType];
+        if (typeof rawValue === "string") {
+          const trimmedValue = rawValue.trim();
+          const wantsObject = want.includes("object") && trimmedValue.startsWith("{");
+          const wantsArray = want.includes("array") && trimmedValue.startsWith("[");
+          if ((wantsObject || wantsArray) && !hasDuplicateMemberNames(trimmedValue)) {
+            try {
+              const parsed: unknown = JSON.parse(trimmedValue);
+              if ((wantsObject && isPlainObject(parsed)) || (wantsArray && Array.isArray(parsed))) {
+                args[name] = parsed;
+                changes.push(
+                  `field ${name} coerced to ${isPlainObject(parsed) ? "object" : "array"} (via $ref)`,
+                );
+              }
+            } catch {
+              // Not a whole-value JSON document: abstain (no comma-list,
+              // no prose slice, no partial parse for $ref properties).
+            }
+          }
+        }
+      }
+      continue;
+    }
+
     const [coerced, changed] = coerceProperty(declaredType, propSchema as Record<string, unknown>, rawValue);
 
     if (changed && coerced !== rawValue) {

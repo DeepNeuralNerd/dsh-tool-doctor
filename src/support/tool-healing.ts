@@ -23,6 +23,9 @@
  *   G3. is a lone tag in backticks (`` `<function=name>` `` names the format)
  *   G4. is nested inside another marker's coverage (even one that failed to parse)
  *   G5. is a bare (markerless) execution-class name: python/terminal/edit_file/mcp__*
+ *   G6. is bracketed as an example — wrapped in quotes/parens in the prose
+ *       (a Qwen3 parser report: example markup read as executable calls;
+ *       second review round: uncertain text stays text)
  *
  * `healGate` mirrors passthrough_healing.heal_gate: healing is off when
  * `tool_choice == "none"`, when `response_format` constrains decoding
@@ -443,6 +446,80 @@ function isExecutionClassName(name: string): boolean {
   return EXECUTION_CLASS_TOOL_NAMES.has(n) || n.startsWith(MCP_TOOL_PREFIX);
 }
 
+// G6 — example-bracketing characters. A marker whose nearest non-space
+// neighbours on BOTH sides form an open/close pair from this set is quoted as
+// an example in prose ("… <function=read>…</function> …"), not emitted as a
+// call. Straight quotes are in both sets (same char can open and close).
+// Square brackets are deliberately EXCLUDED: the Mistral array and glued-body
+// tiling place `[` / `]` directly beside real call spans.
+const EXAMPLE_QUOTE_OPEN: ReadonlySet<string> = new Set([
+  '"',
+  "'",
+  "\u201c",
+  "\u2018",
+  "(",
+  "「",
+  "『",
+]);
+const EXAMPLE_QUOTE_CLOSE: ReadonlySet<string> = new Set([
+  '"',
+  "'",
+  "\u201d",
+  "\u2019",
+  ")",
+  "」",
+  "』",
+]);
+
+/**
+ * G6 — is the span bracketed as an example? Both sides must match: an example
+ * opener directly before (past spaces/tabs) AND an example closer directly
+ * after. One-sided presence never suppresses — a real call followed by a
+ * period, or preceded by a colon, promotes as normal.
+ */
+function isQuotedExample(text: string, start: number, end: number): boolean {
+  let i = start - 1;
+  while (i >= 0 && (text[i] === " " || text[i] === "\t")) i--;
+  if (i < 0 || !EXAMPLE_QUOTE_OPEN.has(text[i]!)) return false;
+  let j = end;
+  while (j < text.length && (text[j] === " " || text[j] === "\t")) j++;
+  if (j >= text.length) return false;
+  return EXAMPLE_QUOTE_CLOSE.has(text[j]!);
+}
+
+/**
+ * Canonical form of call arguments for duplicate identity: parse (when a JSON
+ * string) and re-stringify with recursively sorted keys, so a native call and
+ * its promoted text twin compare equal regardless of key order or whitespace.
+ * Unparseable values canonicalize to their raw string.
+ */
+export function canonicalCallArgs(value: unknown): string {
+  let v: unknown = value;
+  if (typeof value === "string") {
+    try {
+      v = JSON.parse(value);
+    } catch {
+      return value;
+    }
+  }
+  const sortDeep = (x: unknown): unknown => {
+    if (Array.isArray(x)) return x.map(sortDeep);
+    if (x && typeof x === "object") {
+      const out: Record<string, unknown> = {};
+      for (const k of Object.keys(x as Record<string, unknown>).sort()) {
+        out[k] = sortDeep((x as Record<string, unknown>)[k]);
+      }
+      return out;
+    }
+    return x;
+  };
+  try {
+    return JSON.stringify(sortDeep(v));
+  } catch {
+    return String(value);
+  }
+}
+
 /**
  * G4 — marker coverage regions. Each opener maps to its balanced end (close
  * tag when present, else to-EOF for an unbalanced opener), so a marker nested
@@ -530,6 +607,7 @@ export function parseToolCallsFromText(
     if (isCovered(start, end)) return;
     if (!name) return;
     if (enabledToolNames && !enabledToolNames.has(name)) return;
+    if (isQuotedExample(text, start, end)) return; // G6 — example markup stays text
     covered.push([start, end]);
     const argsStr = typeof argsObj === "string" ? argsObj : JSON.stringify(argsObj);
     calls.push({ id: `${idPrefix}_${calls.length}`, name, arguments: argsStr, span: [start, end] });

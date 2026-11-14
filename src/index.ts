@@ -50,11 +50,13 @@ import {
   setGuidanceText,
 } from "./support/prompt.ts";
 import {
+  canonicalCallArgs,
   healTextBlock,
   hasHealSignal,
   healGate,
   parseToolCallsFromText,
   stripToolCallMarkup,
+  type ParsedToolCall,
 } from "./support/tool-healing.ts";
 import type {
   DoctorConfig,
@@ -722,12 +724,28 @@ export function apply(ctxRaw: unknown, userConfig: Partial<DoctorConfig> = {}): 
         // Per-stream sequence: promoted ids stay unique across every text
         // block of this message (each block's parse starts its counter at 0).
         let healSeq = 0;
+        // Duplicate-promotion guard (Qwen3 parser report; second review round,
+        // 2026-11-14): native tool calls observed anywhere in this message
+        // suppress promoted text twins with identical name + canonical
+        // arguments. Healed call blocks are therefore held until stream end —
+        // order (text-first or native-first) no longer matters for the guard;
+        // the re-emitted TEXT still streams out immediately at its position.
+        const nativeArgs = new Map<string, Set<string>>();
+        const pendingHeal: Array<{ call: ParsedToolCall; blockText: string; events: unknown[] }> = [];
         for await (const chunk of next()) {
           const c = chunk as {
             type?: string;
             index?: number;
-            block?: { type?: string; text?: string };
+            block?: { type?: string; text?: string; name?: string; arguments?: unknown };
           };
+          if (c?.type === "block-end" && c.block?.type === "tool-call") {
+            // Record native call identity for the duplicate guard.
+            if (typeof c.block.name === "string") {
+              const bucket = nativeArgs.get(c.block.name) ?? new Set<string>();
+              bucket.add(canonicalCallArgs(c.block.arguments));
+              nativeArgs.set(c.block.name, bucket);
+            }
+          }
           if (c?.type === "block-end" && c.block?.type === "text" && typeof c.block.text === "string") {
             const blockText = c.block.text;
             const healed = healTextBlock(blockText, allowed, idPrefix, healSeq);
@@ -740,51 +758,71 @@ export function apply(ctxRaw: unknown, userConfig: Partial<DoctorConfig> = {}): 
                 index: c.index,
                 block: { type: "text", text: healed.text },
               };
-              // Append healed tool-call blocks on fresh, non-colliding indices.
+              // Hold the healed tool-call blocks (three events each) until
+              // stream end, so a native twin can veto promotion in either
+              // stream order.
               for (const call of healed.calls) {
                 const idx = nextHealIndex++;
-                yield { type: "block-start", index: idx, blockType: "tool-call" };
-                yield {
-                  type: "tool-call-delta",
-                  index: idx,
-                  id: call.id,
-                  name: call.name,
-                  argumentsDelta: call.arguments,
-                };
-                yield {
-                  type: "block-end",
-                  index: idx,
-                  block: { type: "tool-call", id: call.id, name: call.name, arguments: call.arguments },
-                };
+                pendingHeal.push({
+                  call,
+                  blockText,
+                  events: [
+                    { type: "block-start", index: idx, blockType: "tool-call" },
+                    {
+                      type: "tool-call-delta",
+                      index: idx,
+                      id: call.id,
+                      name: call.name,
+                      argumentsDelta: call.arguments,
+                    },
+                    {
+                      type: "block-end",
+                      index: idx,
+                      block: { type: "tool-call", id: call.id, name: call.name, arguments: call.arguments },
+                    },
+                  ],
+                });
               }
-              // Same startup gate the dispatch and observer record paths use:
-              // a promotion that lands while history restore is in flight
-              // must not be overwritten by restore's aggregate replacement.
-              void restoreReady.then(() => {
-                for (const call of healed.calls) {
-                  try {
-                    const spanText = blockText.slice(call.span[0], call.span[1]) || call.name;
-                    recordEvent({
-                      id: `norm_resp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-                      time: Date.now(),
-                      toolName: call.name,
-                      category: "RESPONSE_TOOL_HEAL",
-                      wasHealed: true,
-                      originalArgsPreview: compactPreview(spanText),
-                      normalizedArgsPreview: compactPreview(call.arguments),
-                      // Promotion is not an execution outcome yet; count it in its
-                      // own bucket so healed-success stays a dispatch metric.
-                      status: "promoted",
-                    });
-                  } catch {
-                    // Recording is diagnostic only; never disturb the stream.
-                  }
-                }
-              });
               continue;
             }
           }
           yield chunk;
+        }
+        // Stream end: flush held promotions, dropping exact twins of native
+        // calls (same name, canonical-identical arguments). A dropped twin is
+        // NOT recorded as promoted — the native call is what ran.
+        const survivors: typeof pendingHeal = [];
+        for (const held of pendingHeal) {
+          const twins = nativeArgs.get(held.call.name);
+          if (twins && twins.has(canonicalCallArgs(held.call.arguments))) continue;
+          survivors.push(held);
+          for (const event of held.events) yield event;
+        }
+        if (survivors.length > 0) {
+          // Same startup gate the dispatch and observer record paths use:
+          // a promotion that lands while history restore is in flight
+          // must not be overwritten by restore's aggregate replacement.
+          void restoreReady.then(() => {
+            for (const { call, blockText } of survivors) {
+              try {
+                const spanText = blockText.slice(call.span[0], call.span[1]) || call.name;
+                recordEvent({
+                  id: `norm_resp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                  time: Date.now(),
+                  toolName: call.name,
+                  category: "RESPONSE_TOOL_HEAL",
+                  wasHealed: true,
+                  originalArgsPreview: compactPreview(spanText),
+                  normalizedArgsPreview: compactPreview(call.arguments),
+                  // Promotion is not an execution outcome yet; count it in its
+                  // own bucket so healed-success stays a dispatch metric.
+                  status: "promoted",
+                });
+              } catch {
+                // Recording is diagnostic only; never disturb the stream.
+              }
+            }
+          });
         }
       })();
     },
