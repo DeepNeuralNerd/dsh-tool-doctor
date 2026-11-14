@@ -2,6 +2,21 @@
 
 ## Unreleased (2026-11-14)
 
+- **Factory guidance rewritten to "## Reliable tool calls".** The prompt
+  contribution now leads with host-structured tool calls (no simulated tags
+  in response text), exact names and schemas (description only where the
+  schema requires one), and dependency-ordered awaits with cause-first
+  retries. The Code-Mode and grep rules stay CONDITIONAL IN WORDING ("If
+  Code-Mode exposes run_code…", "If using grep's default ripgrep regex…")
+  because the section is shared and KV-cache-stable — no per-session tool
+  detection was added (none verified on the host API). Heading and text
+  replaced verbatim; exported constants, mutable guidance functions,
+  registration order (400), and dashboard edit/reset behavior unchanged.
+  New `tests/prompt-guidance.spec.ts` pins the behaviors, not the copy: the
+  default appears through `getGuidanceText()`, edits stick (whitespace can't
+  wipe them), reset restores, and the injectPrompt toggle empties/restores
+  the section per assemble without re-registration.
+
 - **A restored snapshot is checked, not trusted.** On open, the store
   restores saved stats while `status` is still "idle" — so before the first
   live refresh resolved, the card could wear a green "Working normally" (or

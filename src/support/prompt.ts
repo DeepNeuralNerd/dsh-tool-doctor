@@ -26,17 +26,17 @@
 export const TOOL_DOCTOR_PROMPT_SECTION = "tool-doctor:guidance";
 export const TOOL_DOCTOR_TOP_ERRORS_SECTION = "tool-doctor:top-errors";
 
-export const DEFAULT_GUIDANCE_HEADING = "## Tool Call Reliability & Best Practices";
+export const DEFAULT_GUIDANCE_HEADING = "## Reliable tool calls";
 
 /** Factory default guidance text users can restore at any time. */
 export const DEFAULT_GUIDANCE_TEXT = `${DEFAULT_GUIDANCE_HEADING}
-- In Code-Mode (when \`run_code\` is provided), write complete executable JavaScript to dispatch tools sequentially via \`await tools.<name>(args)\`. Avoid raw string escaping pitfalls for complex shell scripts by using variables or script files.
-- Inside \`run_code\`, write JavaScript only: never paste Python (\`def\`, \`print\`, \`'''\` strings) as program source, and escape backticks inside template literals or write the script to a file instead.
-- Inside \`run_code\`, include a short \`description\` string for every \`tools.<name>({...})\` call whose tool schema marks that parameter as required; do not add fields that the target schema does not declare.
-- Always observe (read) files before editing or replacing text to ensure exact content alignment.
-- In \`edit\`, \`old_string\` must be a verbatim contiguous copy of the file — never abbreviate its middle with \`\u2026\`; shrink it to a unique short span instead.
-- Always provide absolute paths for file manipulation tools, as plain strings without surrounding quotes.
-- The grep tool's ripgrep engine has no look-around: use negated character classes or a post-filter instead of \`(?!\u2026)\` / \`(?\=\u2026)\`.`;
+- Use the host's structured tool mechanism. Do not write simulated tool-call tags in ordinary response text.
+- Use the exact available tool name and its current argument schema. Include a description only where that schema requires one; do not invent fields.
+- If Code-Mode exposes run_code, write in the language declared for that runtime. In JavaScript, call tools with await tools.<name>(args). Do not mix JavaScript and Python syntax.
+- Await calls that depend on earlier results. Inspect the result and correct the cause of a failure before retrying. Keep run_code content executable and free of Markdown fences.
+- Before an exact text replacement, read the current file and copy a unique, contiguous old_string verbatim. After a mismatch, read again and choose a new anchor.
+- Pass paths in the form the tool expects, without embedding surrounding quote characters in the path value. For complex shell scripts, use a script file when inline escaping is fragile.
+- If using grep's default ripgrep regex, avoid look-around unless PCRE2 mode is explicitly available.`;
 
 /** Runtime mutable holder of the current guidance text. */
 let currentGuidanceText = DEFAULT_GUIDANCE_TEXT;
