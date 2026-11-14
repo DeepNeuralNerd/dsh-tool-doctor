@@ -3,6 +3,19 @@
 All notable changes to **Tool doctor** are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **Path-quote unwrap now covers image readers.** The candidate ledger recorded a
+  `read_image` call whose `file_path` arrived quote-wrapped (`"\"C:\…\f.md\""`)
+  and passed through unrepaired — the same emission artifact the `path-quotes`
+  rule already heals on `read`/`write`/`edit`/`glob`/`grep`. `read_image` and
+  `modlens_read_image` joined that tool set, so the next such call is repaired
+  before dispatch instead of surfacing as a candidate. The strict gate is
+  unchanged: one matched outer quote pair, absolute-path interior only.
+  Two regression tests added (437 passing).
+
 ## [1.0.0] — 2026-11-14
 
 First public release.

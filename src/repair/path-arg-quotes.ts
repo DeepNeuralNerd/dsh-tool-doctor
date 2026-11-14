@@ -12,9 +12,11 @@
  * inner text is an absolute path.
  *
  * Scope discipline:
- *  - Only PATH-shaped parameters (`file_path`, `path`) on the file tools are
- *    touched; content fields may legitimately contain edge quotes and are never
- *    rewritten.
+ *  - Only PATH-shaped parameters (`file_path`, `path`) on file and image-read
+ *    tools are touched; content fields may legitimately contain edge quotes and
+ *    are never rewritten. Image readers joined the set on 2026-11-14 after the
+ *    candidate ledger recorded a quote-wrapped `read_image` path passing
+ *    through unrepaired — same emission artifact, same strict gate.
  *  - Only one outer pair of IDENTICAL quote characters (double, single or
  *    backtick) is stripped, and only when the unwrapped text is an absolute
  *    path (drive letter, UNC, or unix root). Anything else passes through — a
@@ -31,6 +33,8 @@ const PATH_TOOLS: ReadonlySet<string> = new Set([
   "edit",
   "glob",
   "grep",
+  "read_image",
+  "modlens_read_image",
 ]);
 
 /** Parameter names on those tools that are file/directory paths. */

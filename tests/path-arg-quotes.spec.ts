@@ -40,6 +40,21 @@ describe("dequotePathArgs", () => {
     expect((out as Record<string, unknown>).path).toBe("C:/work");
   });
 
+  it("unwraps a quoted file_path for read_image (candidate: PASSTHROUGH quote-wrap, 2026-11-14)", () => {
+    const args = { file_path: '"C:\\Users\\me\\docs\\CHANGELOG.md"' };
+    const out = dequotePathArgs("read_image", args);
+    expect(out).toBeDefined();
+    expect((out as Record<string, unknown>).file_path).toBe("C:\\Users\\me\\docs\\CHANGELOG.md");
+  });
+
+  it("unwraps a quoted path parameter for modlens_read_image", () => {
+    const args = { path: '"C:/Users/me/shot.png"', prompt: "read it" };
+    const out = dequotePathArgs("modlens_read_image", args);
+    expect(out).toBeDefined();
+    expect((out as Record<string, unknown>).path).toBe("C:/Users/me/shot.png");
+    expect((out as Record<string, unknown>).prompt).toBe("read it");
+  });
+
   it("returns undefined when no path parameter is wrapped", () => {
     const args = { file_path: "C:\\Users\\me\\file.txt" };
     expect(dequotePathArgs("read", args)).toBeUndefined();
