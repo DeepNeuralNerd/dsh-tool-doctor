@@ -1,0 +1,5 @@
+# Keep line endings honest everywhere: LF in the repo AND the working
+# copy. The developer default here is core.autocrlf=true, which would
+# rewrite source files to CRLF at the next checkout — silently breaking
+# byte-exact multi-line matching by edit tools, patches, and diffs.
+* text=auto eol=lf
