@@ -26,7 +26,7 @@ describe("normalizeEditorArguments (edit)", () => {
     expect((out as Record<string, unknown>).view_range).toEqual([1, 5]);
   });
 
-  it("clamps an inverted range (end < start) up to the start", () => {
+  it("swaps an inverted range [9,3] → [3,9]", () => {
     const out = normalizeEditorArguments(
       "edit",
       { file_path: "/a.txt", view_range: [9, 3] },
@@ -34,7 +34,8 @@ describe("normalizeEditorArguments (edit)", () => {
       undefined,
     );
     expect(out).toBeDefined();
-    expect((out as Record<string, unknown>).view_range).toEqual([9, 9]);
+    // The swap preserves the model's intended range.
+    expect((out as Record<string, unknown>).view_range).toEqual([3, 9]);
   });
 
   it("resolves a relative file_path against the session cwd", () => {
@@ -119,5 +120,31 @@ describe("normalizeReadArguments", () => {
 
   it("ignores tools outside the offset family", () => {
     expect(normalizeReadArguments("edit", { offset: 0 })).toBeUndefined();
+  });
+});
+
+describe("view_range flip fix (new test)", () => {
+  it("swaps flipped view_range [120, 20] → [20, 120]", () => {
+    const out = normalizeEditorArguments(
+      "edit",
+      { file_path: "/a.txt", view_range: [120, 20] },
+      "/workspace",
+      undefined,
+    );
+    expect(out).toBeDefined();
+    // The flip fix swaps them before clamping.
+    expect((out as Record<string, unknown>).view_range).toEqual([20, 120]);
+  });
+
+  it("keeps [5, -1] with end -1 for str_replace_editor (no swap)", () => {
+    const out = normalizeEditorArguments(
+      "str_replace_editor",
+      { path: "/a.txt", view_range: [5, -1] },
+      "/workspace",
+      undefined,
+    );
+    expect(out).toBeDefined();
+    // end === -1 means "to end" — no swap should happen.
+    expect((out as Record<string, unknown>).view_range).toEqual([5, -1]);
   });
 });

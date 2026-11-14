@@ -1,33 +1,149 @@
 /**
  * Structural argument repair for the ARGS_UNWRAP rule (rule 9, family 2).
  *
- * Models/gateways sometimes hand the dispatcher an `arguments` payload that is
- * the right object in the wrong envelope. Three shapes, all recovered by a
- * re-parse-gated unwrap (we adopt a rewrite ONLY if it yields a plain object):
- *  1. Double-encoded JSON: the payload is a JSON *string* of the object, or a
- *     string of a string of it (`"\"{\\\"a\\\":1}\""`).
- *  2. Markdown-fenced / prose-wrapped JSON: ```json … ``` or leading/trailing
- *     prose around the braces.
- *  3. One-level wrapper: `{"arguments":{…}}`, `{"args":{…}}`, `{"input":{…}}`,
- *     `{"parameters":{…}}`, `{"tool_input":{…}}` when the tool wants the inner
- *     object directly (guarded: the outer key is the ONLY key).
+ * Two shapes, one module:
+ *  - A plain-object envelope with a single recognized wrapper key
+ *    (`arguments`/`args`/`input`/…) is unwrapped one level.
+ *  - A STRING payload is recovered through ordered stages (plain parse,
+ *    markdown-fence strip, prose slice, trailing-comma strip, double-decode);
+ *    the rewrite is adopted only when the final parse yields a plain object.
  *
  * @module dsh-tool-doctor/repair/args-json
  */
 
-/** Outcome of a successful structural unwrap. */
 export interface ArgUnwrapResult {
   args: Record<string, unknown>;
   changes: string[];
 }
 
-/**
- * Recover a plain-object argument payload from a wrapped or malformed JSON
- * envelope. Returns undefined when the payload is already a usable object or
- * when no unambiguous object can be recovered (never fabricate one).
- */
-export function repairArgsPayload(_rawArgs: unknown): ArgUnwrapResult | undefined {
-  // SCAFFOLD STUB — real implementation + tests delivered by the schema-args
-  // work package. Inert here: every call passes through untouched.
+const SINGLE_KEY_WRAPPERS = new Set([
+  "arguments", "args", "input", "parameters", "tool_input", "params", "payload"
+]);
+
+function isPlainObject(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    !(value instanceof Date) &&
+    !(value instanceof RegExp)
+  );
+}
+
+function isWrapperKey(key: string): boolean {
+  return SINGLE_KEY_WRAPPERS.has(key.toLowerCase());
+}
+
+function stripTrailingCommas(input: string): string {
+  return input.replace(/,\s*([}\]])/g, "$1");
+}
+
+function stripMarkdownFences(input: string): string | undefined {
+  const trimmed = input.trim();
+  if (trimmed.startsWith("```json") && trimmed.endsWith("```")) {
+    return trimmed.slice(7, -3);
+  }
+  if (trimmed.startsWith("```") && trimmed.endsWith("```")) {
+    return trimmed.slice(3, -3);
+  }
+  return undefined;
+}
+
+function extractJsonObjectFromProse(input: string): string | undefined {
+  const startIdx = input.indexOf("{");
+  if (startIdx === -1) return undefined;
+  const endIdx = input.lastIndexOf("}");
+  if (endIdx <= startIdx || endIdx === -1) return undefined;
+  return input.slice(startIdx, endIdx + 1);
+}
+
+function parseWithRecovery(raw: string): { value: Record<string, unknown>; changes: string[] } | null {
+  // Step a: plain JSON.parse
+  try {
+    const parsed = JSON.parse(raw);
+    if (isPlainObject(parsed)) {
+      return { value: parsed as Record<string, unknown>, changes: ["plain JSON.parse"] };
+    }
+  } catch {}
+
+  // Step b: strip markdown fences then parse
+  const withFencesStripped = stripMarkdownFences(raw);
+  if (withFencesStripped !== undefined) {
+    try {
+      const parsed = JSON.parse(withFencesStripped);
+      if (isPlainObject(parsed)) {
+        return { value: parsed as Record<string, unknown>, changes: ["strip markdown fences", "JSON.parse"] };
+      }
+    } catch {}
+  }
+
+  // Step c: slice from first "{" to last "}" then parse
+  const withProseStripped = extractJsonObjectFromProse(raw);
+  if (withProseStripped !== undefined) {
+    try {
+      const parsed = JSON.parse(withProseStripped);
+      if (isPlainObject(parsed)) {
+        return { value: parsed as Record<string, unknown>, changes: ["extract from prose", "JSON.parse"] };
+      }
+    } catch {}
+  }
+
+  // Step d: remove trailing commas then parse
+  const withTrailingCommasStripped = stripTrailingCommas(raw);
+  if (withTrailingCommasStripped !== raw) {
+    try {
+      const parsed = JSON.parse(withTrailingCommasStripped);
+      if (isPlainObject(parsed)) {
+        return { value: parsed as Record<string, unknown>, changes: ["strip trailing commas", "JSON.parse"] };
+      }
+    } catch {}
+  }
+
+  // Step e: double-encoded JSON
+  try {
+    const firstParse = JSON.parse(raw);
+    if (typeof firstParse === "string") {
+      try {
+        const parsed = JSON.parse(firstParse);
+        if (isPlainObject(parsed)) {
+          return { value: parsed as Record<string, unknown>, changes: ["double-encoded JSON", "JSON.parse"] };
+        }
+      } catch {}
+    }
+  } catch {}
+
+  return null;
+}
+
+export function repairArgsPayload(rawArgs: unknown): ArgUnwrapResult | undefined {
+  // Rule 1: rawArgs is a plain object → check for wrapper unwrap or already usable
+  if (isPlainObject(rawArgs)) {
+    const argsObj = rawArgs as Record<string, unknown>;
+    const keys = Object.keys(argsObj);
+
+    // Wrapper unwrap — EXACTLY ONE key that is a recognized wrapper name
+    if (keys.length === 1 && isWrapperKey(keys[0]) && isPlainObject(argsObj[keys[0]])) {
+      return {
+        args: argsObj[keys[0]] as Record<string, unknown>,
+        changes: ["Unwrapped one-level arguments envelope"],
+      };
+    }
+
+    // Already a usable plain object → return undefined (per spec)
+    return undefined;
+  }
+
+  // Rule 2: rawArgs is a string → try repair stages in order
+  if (typeof rawArgs === "string") {
+    const result = parseWithRecovery(rawArgs);
+    if (result && isPlainObject(result.value)) {
+      return {
+        args: result.value,
+        changes: [result.changes.join(", ")],
+      };
+    }
+  }
+
+  // Rule 3: Any other type → undefined
   return undefined;
 }

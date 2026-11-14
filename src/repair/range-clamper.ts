@@ -1,8 +1,10 @@
 /**
  * Range and index normalization for editor and paging tools.
  *
- * Two distinct repairs, one module:
- *  - `view_range` clamping for editor tools (1-based floor, end >= start,
+ * Three distinct repairs, one module:
+ *  - view_range flip fix: when [start, end] has both finite numbers, end !== -1,
+ *    and end < start → swap them (models emit a flipped pair).
+ *  - view_range clamping for editor tools (1-based floor, end >= start,
  *    optional ceiling from a known line count; `-1` means "to end" on
  *    str_replace_editor only).
  *  - Off-by-one index fixes (`offset: 0` → `1`, `limit: 0` → `1`) for the
@@ -57,9 +59,15 @@ export function normalizeEditorArguments(
     const [start, end] = range;
     if (typeof start === "number" && Number.isFinite(start) &&
         typeof end === "number" && Number.isFinite(end)) {
-      let validStart = Math.max(1, Math.floor(start));
-      const isToEnd = toolName === "str_replace_editor" && end === -1;
-      let validEnd = isToEnd ? -1 : Math.max(validStart, Math.floor(end));
+      // Models emit a flipped pair: [start, end] with end !== -1 and end < start
+      // means the intended span is [end, start] — swap before clamping so the
+      // ordinary 1-based floor and line-count ceiling still apply.
+      const flipped = end !== -1 && end < start;
+      const pairStart = flipped ? end : start;
+      const pairEnd = flipped ? start : end;
+      let validStart = Math.max(1, Math.floor(pairStart));
+      const isToEnd = toolName === "str_replace_editor" && pairEnd === -1;
+      let validEnd = isToEnd ? -1 : Math.max(validStart, Math.floor(pairEnd));
       if (maxLines !== undefined && Number.isSafeInteger(maxLines) && maxLines > 0) {
         validStart = Math.min(validStart, maxLines);
         validEnd = isToEnd ? -1 : Math.min(validEnd, maxLines);

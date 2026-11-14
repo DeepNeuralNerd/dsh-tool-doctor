@@ -36,6 +36,14 @@ const SESSION = {
   codeLanguage: () => "typescript",
 };
 
+// A Windows-world session: absolute Windows paths keep their backslashes, so
+// the quote stage (not the path-separator stage) owns the repair.
+const WINDOWS_SESSION = {
+  agent: undefined,
+  cwd: () => "C:\\work",
+  codeLanguage: () => "typescript",
+};
+
 function textResult(text: string): ToolExecutionResult {
   return { content: [{ type: "text", text }] };
 }
@@ -98,7 +106,7 @@ describe("runPipeline — pre-dispatch repair", () => {
 
   it("claims PATH_QUOTES when a wrapped absolute path is unwrapped", async () => {
     const exec = makeExec({ name: "read", arguments: { file_path: "\"C:\\dir\\f.txt\"" } });
-    const outcome = await runPipeline(exec, async () => textResult("body"), CONFIG, SESSION);
+    const outcome = await runPipeline(exec, async () => textResult("body"), CONFIG, WINDOWS_SESSION);
     expect(outcome.wasHealed).toBe(true);
     expect(outcome.category).toBe("PATH_QUOTES");
     expect((exec.arguments as Record<string, unknown>).file_path).toBe("C:\\dir\\f.txt");
@@ -347,5 +355,104 @@ describe("runPipeline — thrown dispatches", () => {
     expect(outcome.wasHealed).toBe(true);
     expect(outcome.category).toBe("UNKNOWN_TOOL");
     expect(executed.length).toBe(1);
+  });
+});
+
+describe("runPipeline — whitespace-tolerant edit retry (rule 4, EDIT_WHITESPACE)", () => {
+  it("retries a not-found edit with the line-ending-equivalent anchor and settles", async () => {
+    const nested: Array<{ name: string; arguments: unknown }> = [];
+    const tools = {
+      get: (name: string) => ({ name }),
+      execute: async (input: { name: string; arguments: unknown }) => {
+        nested.push({ name: input.name, arguments: input.arguments });
+        return textResult("patched");
+      },
+    } as never;
+
+    const exec = makeExec({
+      name: "edit",
+      arguments: { file_path: "/a.txt", old_string: "alpha\nbeta", new_string: "x" },
+    });
+    const outcome = await runPipeline(
+      exec,
+      async () => ({
+        isError: true,
+        error: Object.assign(new Error("old_string not found in file"), {
+          code: "FS_EDIT_NOT_FOUND",
+        }),
+      }),
+      CONFIG,
+      SESSION,
+      { tools },
+    );
+
+    expect(outcome.wasHealed).toBe(true);
+    expect(outcome.category).toBe("EDIT_WHITESPACE");
+    const editRetries = nested.filter((call) => call.name === "edit");
+    expect(editRetries).toHaveLength(1); // terminal success: no anchor-refresh read
+    const retryArgs = editRetries[0].arguments as Record<string, unknown>;
+    expect(retryArgs.old_string).toBe("alpha\r\nbeta"); // host's spelling adopted
+    expect(outcome.result.content?.[0]).toMatchObject({ text: "patched" });
+  });
+
+  it("keeps the original not-found error authoritative when every variant fails", async () => {
+    const nested: Array<{ name: string; arguments: unknown }> = [];
+    const tools = {
+      get: (name: string) => ({ name }),
+      execute: async (input: { name: string; arguments: unknown }) => {
+        nested.push({ name: input.name, arguments: input.arguments });
+        return {
+          isError: true,
+          error: Object.assign(new Error("old_string not found in file"), {
+            code: "FS_EDIT_NOT_FOUND",
+          }),
+        };
+      },
+    } as never;
+
+    const exec = makeExec({
+      name: "edit",
+      arguments: { file_path: "/a.txt", old_string: "alpha\nbeta", new_string: "x" },
+    });
+    const outcome = await runPipeline(
+      exec,
+      async () => ({
+        isError: true,
+        error: Object.assign(new Error("original anchor miss"), {
+          code: "FS_EDIT_NOT_FOUND",
+        }),
+      }),
+      CONFIG,
+      SESSION,
+      { tools },
+    );
+
+    expect(outcome.wasHealed).toBe(false);
+    expect(nested.filter((call) => call.name === "edit")).toHaveLength(1); // one variant, tried once
+    expect(outcome.result.error).toMatchObject({ message: "original anchor miss" });
+  });
+});
+
+describe("runPipeline — payload-shape and path-family rules (9 / 3)", () => {
+  it("unwraps a JSON-string arguments payload (ARGS_UNWRAP)", async () => {
+    const exec = makeExec({
+      name: "read",
+      arguments: '{"file_path": "/a.txt"}',
+    });
+    const outcome = await runPipeline(exec, async () => textResult("body"), CONFIG, SESSION);
+    expect(outcome.wasHealed).toBe(true);
+    expect(outcome.category).toBe("ARGS_UNWRAP");
+    expect(exec.arguments).toEqual({ file_path: "/a.txt" });
+  });
+
+  it("normalizes backslash paths on a POSIX host (PATH_SEPARATORS)", async () => {
+    const exec = makeExec({
+      name: "read",
+      arguments: { file_path: "/home/user\\docs\\a.txt" },
+    });
+    const outcome = await runPipeline(exec, async () => textResult("body"), CONFIG, SESSION);
+    expect(outcome.wasHealed).toBe(true);
+    expect(outcome.category).toBe("PATH_SEPARATORS");
+    expect((exec.arguments as Record<string, unknown>).file_path).toBe("/home/user/docs/a.txt");
   });
 });
