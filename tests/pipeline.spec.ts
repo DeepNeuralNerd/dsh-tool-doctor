@@ -14,6 +14,7 @@ const CONFIG: DoctorConfig = {
   autoSchemaArgs: true,
   autoFuzzyEdit: true,
   autoNormalizePaths: true,
+  autoKindFixes: true,
   shadowMode: false,
 };
 
@@ -454,5 +455,163 @@ describe("runPipeline — payload-shape and path-family rules (9 / 3)", () => {
     expect(outcome.wasHealed).toBe(true);
     expect(outcome.category).toBe("PATH_SEPARATORS");
     expect((exec.arguments as Record<string, unknown>).file_path).toBe("/home/user/docs/a.txt");
+  });
+});
+
+describe("runPipeline — routing & kind rules (2 / 10) and the truncation hint", () => {
+  it("retries an unknown tool under its uniquely-matching registered name (TOOL_NAME)", async () => {
+    const nested: Array<{ name: string; arguments: unknown }> = [];
+    const tools = {
+      // Name drift means NO exact registered name — the bridge must pass.
+      get: () => undefined,
+      schemas: () => [{ name: "run_code" }, { name: "mcp__shell__bash" }, { name: "read" }],
+      execute: async (input: { name: string; arguments: unknown }) => {
+        nested.push({ name: input.name, arguments: input.arguments });
+        return textResult(`ran:${input.name}`);
+      },
+    } as never;
+
+    const exec = makeExec({ name: "bash", arguments: { command: "ls" } });
+    const outcome = await runPipeline(
+      exec,
+      async () => ({
+        isError: true,
+        error: Object.assign(new Error("Unknown tool: bash"), { code: "UNKNOWN_TOOL" }),
+      }),
+      CONFIG,
+      SESSION,
+      { tools },
+    );
+
+    expect(outcome.wasHealed).toBe(true);
+    expect(outcome.category).toBe("TOOL_NAME");
+    expect(nested).toEqual([{ name: "mcp__shell__bash", arguments: { command: "ls" } }]);
+    const text = (outcome.result.content?.[0] as { text?: string })?.text ?? "";
+    expect(text).toContain("ran:mcp__shell__bash");
+  });
+
+  it("leaves the error standing when the registered plane holds two candidates", async () => {
+    const nested: Array<{ name: string }> = [];
+    const tools = {
+      get: () => undefined,
+      schemas: () => [{ name: "mcp__a__bash" }, { name: "mcp__b__bash" }],
+      execute: async (input: { name: string }) => {
+        nested.push({ name: input.name });
+        return textResult("unreachable");
+      },
+    } as never;
+
+    const exec = makeExec({ name: "bash", arguments: { command: "ls" } });
+    const outcome = await runPipeline(
+      exec,
+      async () => ({
+        isError: true,
+        error: Object.assign(new Error("Unknown tool: bash"), { code: "UNKNOWN_TOOL" }),
+      }),
+      CONFIG,
+      SESSION,
+      { tools },
+    );
+
+    expect(outcome.wasHealed).toBe(false);
+    expect(nested).toHaveLength(0); // ambiguity is never guessed
+    expect(outcome.result.error).toMatchObject({ message: "Unknown tool: bash" });
+  });
+
+  it("lists a directory the file reader hit, via the plane's listing tool (KIND_CORRECTION)", async () => {
+    const nested: Array<{ name: string; arguments: unknown }> = [];
+    const tools = {
+      get: (name: string) =>
+        name === "list_directory"
+          ? {
+              name,
+              inputSchema: {
+                type: "object",
+                properties: { path: { type: "string" } },
+                required: ["path"],
+              },
+            }
+          : undefined,
+      schemas: () => [{ name: "read" }, { name: "list_directory" }],
+      execute: async (input: { name: string; arguments: unknown }) => {
+        nested.push({ name: input.name, arguments: input.arguments });
+        return textResult("file1.txt\nfile2.txt");
+      },
+    } as never;
+
+    const exec = makeExec({ name: "read", arguments: { file_path: "C:\\proj\\src" } });
+    const outcome = await runPipeline(
+      exec,
+      async () => ({
+        isError: true,
+        // Verbatim host message for a directory read.
+        error: new Error('cannot read "C:\\proj\\src": not a regular file'),
+      }),
+      CONFIG,
+      WINDOWS_SESSION,
+      { tools },
+    );
+
+    expect(outcome.wasHealed).toBe(true);
+    expect(outcome.category).toBe("KIND_CORRECTION");
+    expect(nested).toEqual([{ name: "list_directory", arguments: { path: "C:\\proj\\src" } }]);
+  });
+
+  it("stays silent when the plane offers no listing tool", async () => {
+    const exec = makeExec({ name: "read", arguments: { file_path: "/proj/src" } });
+    const tools = {
+      get: () => undefined,
+      schemas: () => [{ name: "read" }, { name: "write" }],
+      execute: async () => textResult("unreachable"),
+    } as never;
+
+    const outcome = await runPipeline(
+      exec,
+      async () => ({
+        isError: true,
+        error: new Error('cannot read "/proj/src": not a regular file'),
+      }),
+      CONFIG,
+      SESSION,
+      { tools },
+    );
+
+    expect(outcome.wasHealed).toBe(false);
+    expect(outcome.category).toBe("PASSTHROUGH");
+    expect(outcome.result.error).toMatchObject({ message: 'cannot read "/proj/src": not a regular file' });
+  });
+
+  it("appends the truncation hint when raw arguments cut off mid-string", async () => {
+    const exec = makeExec({
+      name: "write",
+      // Cut inside the string value: every repair stage honestly fails.
+      arguments: '{"file_path": "/a.txt", "content": "console.log(1)',
+    });
+    const outcome = await runPipeline(
+      exec,
+      async () => ({
+        isError: true,
+        error: new Error('invalid arguments for "write": expected an object'),
+      }),
+      CONFIG,
+      SESSION,
+    );
+
+    expect(outcome.wasHealed).toBe(false);
+    const text = (outcome.result.content?.[0] as { text?: string })?.text ?? "";
+    expect(text).toContain("end mid-value");
+    expect(text).toContain("Nothing was repaired.");
+  });
+
+  it("keeps the truncation hint off when the arguments are a healthy object", async () => {
+    const exec = makeExec({ name: "read", arguments: { file_path: "/a.txt" } });
+    const outcome = await runPipeline(
+      exec,
+      async () => ({ isError: true, error: new Error("ENOENT: no such file or directory") }),
+      CONFIG,
+      SESSION,
+    );
+    const text = (outcome.result.content?.[0] as { text?: string })?.text ?? "";
+    expect(text).not.toContain("mid-value");
   });
 });

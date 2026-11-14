@@ -116,9 +116,9 @@ export const en = {
   rule1Title: "run_code argument repair",
   rule1Desc:
     "Fixes run_code schema mismatches (command→code, missing description — including descriptions inside embedded tool() calls), strips Markdown fences, and heals common syntax slips.",
-  rule2Title: "Unknown-tool bridge",
+  rule2Title: "Unknown-tool recovery",
   rule2Desc:
-    "Re-dispatches UNKNOWN_TOOL results as nested host calls when the target tool is registered in scope; direct calls rejected early by the host cannot be intercepted.",
+    "Re-dispatches UNKNOWN_TOOL results as nested host calls when the target tool is registered in scope, and retries name drift (case, MCP-namespace segments like bash↔mcp__shell__bash) when the tool plane holds exactly one matching name; direct calls rejected early by the host cannot be intercepted.",
   rule3Title: "Range & path normalization",
   rule3Desc:
     "Clamps out-of-bounds ranges (view_range, read offset past EOF), resolves session-relative paths against the working directory, drops out-of-workspace sourcePaths, and unwraps quoted paths.",
@@ -146,6 +146,9 @@ export const en = {
   ruleFuzzyTitle: "Whitespace-tolerant edit retry",
   ruleFuzzyDesc:
     "When an edit reports old_string not found, retries it once per whitespace-equivalent anchor spelling (CRLF↔LF, tabs↔spaces). The host stays the match authority: an ambiguous variant is rejected, never guessed.",
+  ruleKindTitle: "Directory kind correction (rule 10)",
+  ruleKindDesc:
+    'When a file reader hits a directory ("not a regular file"/EISDIR), the intent is unambiguous — the model wants the folder\'s contents — so the call is re-dispatched to a listing tool the agent can actually call, with arguments built from that tool\'s own definition. No listing tool in scope: the original error stands.',
   ruleShadowTitle: "Shadow mode (measure only)",
   ruleShadowDesc:
     "Evaluates every pre-dispatch repair and records what the rules WOULD fix, but dispatches the original arguments and runs no retries or hints — measure a rule's coverage before trusting it to act.",

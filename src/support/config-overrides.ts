@@ -29,6 +29,7 @@ export const TOGGLE_KEYS: ReadonlyArray<keyof DoctorConfig> = [
   "autoSchemaArgs",
   "autoFuzzyEdit",
   "autoNormalizePaths",
+  "autoKindFixes",
   "shadowMode",
 ];
 

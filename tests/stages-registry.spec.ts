@@ -4,10 +4,10 @@ import { TOGGLE_KEYS } from "../src/support/config-overrides.ts";
 import type { HealCategory } from "../src/types.ts";
 
 describe("stage registry", () => {
-  it("registers fourteen stages in execution order (nine pre, five post)", () => {
-    expect(STAGES).toHaveLength(14);
+  it("registers sixteen stages in execution order (nine pre, seven post)", () => {
+    expect(STAGES).toHaveLength(16);
     expect(PRE_STAGES).toHaveLength(9);
-    expect(POST_STAGES).toHaveLength(5);
+    expect(POST_STAGES).toHaveLength(7);
     // Pre-stages come first in the registry.
     for (let i = 0; i < PRE_STAGES.length; i++) {
       expect(STAGES[i]).toBe(PRE_STAGES[i]);

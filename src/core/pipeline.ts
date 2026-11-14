@@ -35,6 +35,7 @@ import {
 import { compactPreview } from "./preview.ts";
 import type { CircuitBreaker } from "./breaker.ts";
 import { CATEGORY_META, POST_STAGES, PRE_STAGES } from "../stages/index.ts";
+import { looksTruncatedArgs } from "../support/truncation.ts";
 import type { StageEnv } from "./stage.ts";
 
 // ── Public shapes ────────────────────────────────────────────────────────────
@@ -112,6 +113,13 @@ const SYNTAX_HINT =
   "Usual causes: unescaped backticks inside template literals, Python pasted as JS " +
   "(`def`/`print`/`'''`), or a truncated tail. Keep the program short; write long " +
   "shell/python bodies to a file and run that file instead.";
+
+/** Hint appended when raw arguments end in a cut-mid-token shape. */
+const TRUNCATION_HINT =
+  "[tool-doctor hint] This call's arguments end mid-value (unclosed string, brace, " +
+  "or code fence). A likely cause is the model's output limit cutting the call off; " +
+  "if so, split the content across smaller calls or shorten the arguments. " +
+  "Nothing was repaired.";
 
 /** Whether the final error plausibly belongs to the attempted heal class. */
 function healMatchesError(
@@ -320,6 +328,15 @@ export async function runPipeline(
           ) ?? false)
         ) {
           result = appendResultHint(result, SYNTAX_HINT);
+        } else if (
+          // Honest truncation: the stop reason stops at the agent loop and is
+          // never handed to a plugin's tool plane (verified against the
+          // installed host), so a truncated call cannot be GATED here. What
+          // can be said truthfully: unrepaired arguments ending in a
+          // cut-mid-token shape make the output limit a visible suspect.
+          looksTruncatedArgs(exec.arguments)
+        ) {
+          result = appendResultHint(result, TRUNCATION_HINT);
         }
       }
     }

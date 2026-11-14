@@ -86,6 +86,13 @@ export interface ToolRuntime {
   get(name: string, scope?: unknown): unknown;
   /** Re-enter the host's complete execution pipeline with a child call. */
   execute?(execution: ToolExecutionInput): Promise<ToolExecutionResult>;
+  /**
+   * Enumerate the tool schemas callable in `scope` — the host ToolsService
+   * method (`schemas(scope?, toolSet?): ToolSchema[]`, verified against the
+   * installed API catalog). Declared optional: plugins must probe for it and
+   * degrade honestly when a host exposes less than the current one does.
+   */
+  schemas?(scope?: unknown, toolSet?: unknown): readonly { readonly name: string }[];
 }
 
 // ── Plugin configuration ─────────────────────────────────────────────────────
@@ -120,6 +127,8 @@ export interface DoctorConfig {
   autoFuzzyEdit: boolean;
   /** Normalize path separators and ~ prefixes in path arguments to the host-expected form. */
   autoNormalizePaths: boolean;
+  /** Re-dispatch a directory read (and other kind mistakes) to the right-shaped live tool. */
+  autoKindFixes: boolean;
   /**
    * Shadow mode: evaluate every pre-dispatch repair and record what it WOULD
    * fix, but dispatch the original arguments and run no post-dispatch retries
@@ -141,6 +150,7 @@ export const DEFAULT_CONFIG: DoctorConfig = {
   autoSchemaArgs: true,
   autoFuzzyEdit: true,
   autoNormalizePaths: true,
+  autoKindFixes: true,
   shadowMode: false,
 };
 
@@ -173,6 +183,8 @@ export const HEAL_CATEGORIES = [
   "ARGS_TYPE",
   "PATH_SEPARATORS",
   "EDIT_WHITESPACE",
+  "TOOL_NAME",
+  "KIND_CORRECTION",
 ] as const;
 
 /** One recordable healing category. */

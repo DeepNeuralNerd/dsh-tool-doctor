@@ -28,7 +28,7 @@ type TFn = (key: NormalizerKey) => string;
 
 // ── Client-local taxonomy mirrors (no server imports in the browser bundle) ─
 
-/** Panel labels for the 18 recordable categories — mirrors src/stages/index.ts CATEGORY_LABELS. */
+/** Panel labels for the 20 recordable categories — mirrors src/stages/index.ts CATEGORY_LABELS. */
 const CATEGORY_LABELS: Readonly<Record<string, string>> = {
   INVALID_ARGS: "Missing/misplaced args",
   UNKNOWN_TOOL: "Unknown-tool safe recovery",
@@ -48,6 +48,8 @@ const CATEGORY_LABELS: Readonly<Record<string, string>> = {
   ARGS_TYPE: "Schema type coercion",
   PATH_SEPARATORS: "Path separator normalization",
   EDIT_WHITESPACE: "Whitespace-tolerant edit retry",
+  TOOL_NAME: "Tool-name canonicalization",
+  KIND_CORRECTION: "Directory kind correction",
 };
 
 /** Recordable categories in registry order (mirrors HEAL_CATEGORIES). */
@@ -56,6 +58,7 @@ const CATEGORY_ORDER: readonly string[] = [
   "RUN_CODE_DESC", "RUN_CODE_SYNTAX", "INNER_DESC", "FS_OBSERVED", "READ_ARGS",
   "PATH_QUOTES", "MNEMON_RESULT", "PASSTHROUGH", "RESPONSE_TOOL_HEAL",
   "ARGS_UNWRAP", "ARGS_TYPE", "PATH_SEPARATORS", "EDIT_WHITESPACE",
+  "TOOL_NAME", "KIND_CORRECTION",
 ];
 
 /** Healing-rule number each category's repair belongs to (mirrors CATEGORY_TO_RULE; PASSTHROUGH has none). */
@@ -64,7 +67,7 @@ const CATEGORY_TO_RULE: Readonly<Record<string, number>> = {
   INNER_DESC: 1, READ_ARGS: 1, MNEMON_RESULT: 1, UNKNOWN_TOOL: 2,
   RANGE_CLAMP: 3, PATH_SCOPE: 3, PATH_QUOTES: 3, FS_OBSERVED: 4,
   RESPONSE_TOOL_HEAL: 7, ARGS_UNWRAP: 9, ARGS_TYPE: 9,
-  PATH_SEPARATORS: 3, EDIT_WHITESPACE: 4,
+  PATH_SEPARATORS: 3, EDIT_WHITESPACE: 4, TOOL_NAME: 2, KIND_CORRECTION: 10,
 };
 
 /** Error-text hints toward an existing rule for failures no rule processed. */
@@ -75,6 +78,7 @@ const TEXT_RULE_HINTS: ReadonlyArray<{ rule: number; test: RegExp }> = [
   { rule: 4, test: /FS_NOT_OBSERVED|FS_STALE_VERSION|not (?:been )?observed|string to replace|old_string/i },
   { rule: 7, test: /<tool_call|<function=|\[TOOL_CALLS\]/i },
   { rule: 9, test: /expected (?:a |an )?(?:number|boolean|array|object)|arguments (?:must|should) be|not (?:valid|parseable) JSON/i },
+  { rule: 10, test: /not a regular file|is a directory|EISDIR|ENOTDIR|illegal operation on a directory/i },
 ];
 
 /** Config flag that gates each category's repairs (mirrors CATEGORY_TO_FLAG). */
@@ -88,6 +92,7 @@ const CATEGORY_TO_FLAG: Readonly<Record<string, string>> = {
   RESPONSE_TOOL_HEAL: "healResponseTools",
   ARGS_UNWRAP: "autoSchemaArgs", ARGS_TYPE: "autoSchemaArgs",
   PATH_SEPARATORS: "autoNormalizePaths", EDIT_WHITESPACE: "autoFuzzyEdit",
+  TOOL_NAME: "autoBridgeDirectTools", KIND_CORRECTION: "autoKindFixes",
 };
 
 /** Flags carrying each rule's repairs, registry order (mirrors RULE_FLAGS). */
@@ -482,6 +487,7 @@ const RULES: ReadonlyArray<{ flag: string; titleKey: NormalizerKey; descKey: Nor
   { flag: "autoSchemaArgs", titleKey: "ruleSchemaTitle", descKey: "ruleSchemaDesc" },
   { flag: "autoNormalizePaths", titleKey: "rulePathsTitle", descKey: "rulePathsDesc" },
   { flag: "autoFuzzyEdit", titleKey: "ruleFuzzyTitle", descKey: "ruleFuzzyDesc" },
+  { flag: "autoKindFixes", titleKey: "ruleKindTitle", descKey: "ruleKindDesc" },
   { flag: "shadowMode", titleKey: "ruleShadowTitle", descKey: "ruleShadowDesc" },
 ];
 

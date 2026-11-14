@@ -29,6 +29,8 @@ import { argUnwrapStage } from "./arg-unwrap.ts";
 import { typeCoercionStage } from "./type-coercion.ts";
 import { pathNormalizerStage } from "./path-normalizer.ts";
 import { bridgeStage } from "./bridge.ts";
+import { toolNameStage } from "./tool-name.ts";
+import { kindFixStage } from "./kind-fix.ts";
 import { observeRetryStage } from "./observe-retry.ts";
 import { anchorWhitespaceStage } from "./anchor-whitespace.ts";
 import { anchorRefreshStage } from "./anchor-refresh.ts";
@@ -52,6 +54,12 @@ export const STAGES: readonly HealStage[] = [
   // Whitespace retry precedes anchor-refresh: a successful retry settles the
   // dispatch, so the observation refresh only ever runs for real anchor misses.
   bridgeStage,
+  // Name canonicalization follows the bridge: it only ever sees an
+  // UNKNOWN_TOOL the bridge's exact registered-name lookup could not resolve.
+  toolNameStage,
+  // Kind correction precedes the retry family: a directory read is a wrong
+  // door, not a flaky call — re-dispatch by intent, never blind-retry.
+  kindFixStage,
   observeRetryStage,
   anchorWhitespaceStage,
   anchorRefreshStage,
