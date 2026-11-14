@@ -101,3 +101,29 @@ only (pre-dispatch rules are flag-gated).
 - S14 gives the architecture its justification sentence: constrained decoding under-constrains or over-constrains in the wild, and the paper's own remedy is "additional post-processing" — a runtime repair layer is the recommended production pattern, not a hack.
 - S3's quarantine doctrine + S20's retry-safety column = Doctor's ledger design (record honest failures; the breaker pauses classes that prove unreliable).
 - S18's root-cause list is the strongest third-party statement that argument-plane + state-plane repair is where a plugin's leverage lives.
+
+## 7. Second review round — serving-stack reports (2026-11-14, same day)
+
+A second reviewer contributed four tool-serving-stack reports, triaged with the
+ledger-first policy (full disposition in [REVIEW-recommendations-2026-11.md](REVIEW-recommendations-2026-11.md) §8):
+
+- **vLLM `$ref` report** — nested objects delivered as JSON strings exactly when
+  a property uses `$ref`; inline equivalent works. Shipped as the narrowest
+  `$ref` coercion (local/acyclic/capped; object-array only; whole-value parse).
+  New class for the coverage matrix, row: schema-reference opacity → `$ref`
+  gate in ARGS_TYPE (stage 2).
+- **Qwen3 parser report** — example markup read as executable calls, including
+  duplicates. Shipped: native-twin suppression in the stream hook + guard G6
+  (quoted/parenthesized examples stay text). Placeholder-name class was already
+  closed by the declared-tools allowlist.
+- **vLLM streaming duplicate-object report** (`{"x":1}{"x":1}`) — queued as a
+  shadow spec; live probe: **zero occurrences** in this host's ledgers, so no
+  default rule. Both existing parse paths already abstain on the shape.
+- **Ollama envelope corruption + llama.cpp parse-failure opacity** — belong
+  upstream/in diagnostics: no intact bytes at the host means no safe argument
+  repair; error-hints names the provider/error shape when present.
+
+Policy note from this round, adopted: **no typo/fuzzy parameter-name matching**
+— a close spelling does not prove what a mutating call was meant to do; the
+curated, schema-confirmed alias table (§7 REC-5, with the observed-failure
+retention rule) remains the only rename surface.

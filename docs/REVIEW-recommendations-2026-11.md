@@ -188,3 +188,17 @@ check, not proof that a repair preserves intent.**
 | Q3 | No flips | X1–X6 and X8 stay OUT. X7 (file:// URIs) stays on the watch list: percent-decoding can change path identity, so observed frequency alone would not make it safe. |
 | Q4 | New class — SHIPPED (c8f9322) | Duplicate JSON member names (RFC 8259 §4: `JSON.parse` keeps one value silently ⇒ possible silent target swap). The stringified-args ladder now scans every candidate JSON text and abstains on any duplicate name at any object level. Six tests. |
 | Q5 | Direction adopted, queued | Breaker granularity: **(category, tool)** for retry suppression — a tool with a persistent environment/schema problem should not pause recovery for sibling tools; add a category-wide cap when one mechanic fails across several tools. |
+
+## 8. Second reviewer round (2026-11-14) — disposition
+
+Second reviewer model, priorities as given; ledger/shadow-first policy applied
+throughout (the plugin's own ledger probed before enabling anything by default).
+
+| Priority | Recommendation | Disposition |
+|---|---|---|
+| 1 | Resolve local `$ref` types before coercing | **SHIPPED (5de2add)** — local + acyclic + depth-capped pointer resolution; string→object/array ONLY; whole-value strict parse with the RFC 8259 guard reused; number/bool/enum never activated through a pointer; host stays the success authority. Fifteen tests. Insurance by construction: zero DSH built-in tools use `$ref` today; the class arrives with MCP-served schemas. |
+| 2 | Exact duplicated argument object `{"x":1}{"x":1}` | **Queued as shadow spec** — live probe first: the shape has **zero occurrences** in this host's candidate/stats feeds. Spec kept: scanner for exactly two adjacent byte-identical complete objects; read-only/shadow; abstain otherwise. Note the `$ref` narrow gate and the args ladder both already ABSTAIN on this shape (no wrong repair today); the open question is whether to actively heal it. |
+| 3 | Tighten promotion against quoted examples | **SHIPPED (5de2add)** — audit result: (a) placeholder names were already covered by the declared-tools allowlist (`healGate` + `addCall`); (b) the structured-twin class was a REAL gap — now a native call anywhere in the message vetoes its promoted text twin (name + canonical key-sorted args), either order, six adapter tests; (c) new guard **G6**: markup bracketed by quotes/parens in prose stays text — both sides must match, one-sided punctuation never suppresses; brackets deliberately excluded (Mistral array tiling), eight parser tests. |
+| 4 | Duplicate JSON keys → abstain | Already shipped in round one (`c8f9322`), six tests — same RFC 8259 basis. |
+| — | Upstream findings (Ollama corrupted envelopes; llama.cpp parse failures surfaced as HTTP errors without the raw call) | Recorded as diagnostics-only, not rules: when the host never receives intact bytes, no argument repair is possible. Action kept: the error-hints surface names the provider/error shape when present; fix belongs to those parsers. |
+| — | No typo/fuzzy matching for parameter names | Agreed and documented as policy: the per-tool curated table stays; a close spelling does not prove intent for a mutating call (same doctrine as §7 REC-5's observed-failure rule). |
