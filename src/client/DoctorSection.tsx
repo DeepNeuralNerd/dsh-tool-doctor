@@ -454,7 +454,7 @@ export function candidateDomId(key: string): string {
 
 // ── Panel status: the plain answer to "is it working, must I act?" ──────────
 
-export type PanelState = "waiting" | "ok" | "attention" | "paused" | "stale";
+export type PanelState = "waiting" | "ok" | "attention" | "paused" | "stale" | "checking";
 
 /**
  * One headline state for the outcome card, derived in honest order of
@@ -476,6 +476,7 @@ const STATUS_HEADLINE: Readonly<Record<PanelState, NormalizerKey>> = {
   attention: "statusAttention",
   paused: "statusPaused",
   stale: "statusStale",
+  checking: "statusChecking",
 };
 
 const STATUS_DOT: Readonly<Record<PanelState, string>> = {
@@ -484,6 +485,7 @@ const STATUS_DOT: Readonly<Record<PanelState, string>> = {
   attention: styles.statusDotAttention,
   paused: styles.statusDotPaused,
   stale: styles.statusDotStale,
+  checking: styles.statusDotChecking,
 };
 
 /** Coarse age of the shown snapshot, bucketed so the wording never jitters. */
@@ -625,18 +627,36 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
   // refresh would clear that error slot, flipping the card back to
   // "Working normally" without any successful stats load.
   const staleSnapshot = state.statsStale && hasData;
-  const panelState: PanelState = staleSnapshot ? "stale" : basePanelState;
-  const statusReason = staleSnapshot
-    ? t("statusStaleReason")
+  // Restored-from-disk data before the FIRST load has resolved: nothing has
+  // failed yet, but nothing has been verified either — no health claim until
+  // a stats load succeeds. A failed first load sets statsStale, so this
+  // yields to "stale" automatically.
+  const unverifiedSnapshot = state.status === "idle" && hasData && !state.statsStale;
+  const panelState: PanelState = unverifiedSnapshot
+    ? "checking"
+    : staleSnapshot
+      ? "stale"
+      : basePanelState;
+  const statusReason = unverifiedSnapshot
+    ? t("statusCheckingReason")
+    : staleSnapshot
+      ? t("statusStaleReason")
+      : basePanelState === "paused"
+        ? t("statusPausedReason").replace("{n}", String(stats.breakerOpen.length))
+        : basePanelState === "attention"
+          ? t("statusAttentionReason").replace("{n}", String(unrecoveredTotal))
+          : basePanelState === "ok"
+            ? t("statusOkReason")
+            : t("statusWaitingReason");
+  // No action while the snapshot is unverified; a stale card may still route
+  // to what its saved numbers show (failing calls, paused repairs).
+  const statusActionTab: DoctorTab | null = unverifiedSnapshot
+    ? null
     : basePanelState === "paused"
-      ? t("statusPausedReason").replace("{n}", String(stats.breakerOpen.length))
+      ? "rules"
       : basePanelState === "attention"
-        ? t("statusAttentionReason").replace("{n}", String(unrecoveredTotal))
-        : basePanelState === "ok"
-          ? t("statusOkReason")
-          : t("statusWaitingReason");
-  const statusActionTab: DoctorTab | null =
-    basePanelState === "paused" ? "rules" : basePanelState === "attention" ? "errors" : null;
+        ? "errors"
+        : null;
 
   const filteredRecords = useMemo(
     () =>

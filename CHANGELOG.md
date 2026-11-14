@@ -2,6 +2,19 @@
 
 ## Unreleased (2026-11-14)
 
+- **A restored snapshot is checked, not trusted.** On open, the store
+  restores saved stats while `status` is still "idle" — so before the first
+  live refresh resolved, the card could wear a green "Working normally" (or
+  "Needs attention") earned by an UNVERIFIED saved snapshot, with no age
+  line to say so. A neutral "checking" state now covers exactly that window
+  (`status === "idle"` + saved data + nothing failed yet): headline
+  "Checking current status", reason labeling the numbers as the last saved
+  snapshot, no action button on unverified data. A health state appears only
+  after a successful stats load; if that first load fails, `statsStale`
+  takes over and the card reads "Showing saved data" — never an endless
+  check. Two rendered tests pin the neutral headline and the fail-over to
+  stale. 405 tests green.
+
 - **Stats freshness got its own flag.** The stale card keyed on
   `state.error.source === "stats"`, but `error` is one shared transient
   slot: a config or guidance request completing successfully right after a

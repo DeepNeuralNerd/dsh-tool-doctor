@@ -63,6 +63,9 @@ export const en = {
   statusStale: "Showing saved data",
   statusStaleReason:
     "The last refresh did not reach the plugin API — these are the last saved numbers.",
+  statusChecking: "Checking current status",
+  statusCheckingReason:
+    "These numbers are from the last saved snapshot; a first live update is loading.",
   actViewErrors: "See failing calls",
   actViewRules: "Review paused repairs",
   connLost: "Connection lost — showing saved data.",

@@ -278,6 +278,7 @@
 .statusDotAttention { background: var(--td-warn); }
 .statusDotPaused { background: var(--td-err); }
 .statusDotStale { background: var(--td-warn); }
+.statusDotChecking { background: var(--td-border-strong); }
 .statusDotWaiting { background: var(--td-border-strong); }
 
 .statusCopy { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }

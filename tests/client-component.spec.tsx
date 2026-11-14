@@ -238,6 +238,42 @@ describe("snapshot freshness", () => {
     expect(html).toContain(">3<"); // repaired count still shown as saved evidence
   });
 
+  it("verifies a restored snapshot before claiming any health", () => {
+    // Saved stats, first load still in flight (status idle, nothing failed):
+    // a neutral check-in, not a health claim - even when the saved numbers
+    // would have read "Needs attention".
+    const html = renderSection(
+      state({
+        stats: {
+          ...createEmptyStats(),
+          totalIntercepted: 10,
+          healedSuccess: 8,
+          healedFailed: 1,
+          passThroughFailed: 1,
+        },
+        status: "idle",
+      }),
+    );
+    expect(html).toContain('data-state="checking"');
+    expect(html).toContain("Checking current status");
+    expect(html).toContain("last saved snapshot"); // numbers labeled as saved
+    expect(html).not.toContain("Needs attention");
+    expect(html).not.toContain("See failing calls"); // no action on unverified data
+  });
+
+  it("a failed first load reads as saved data, not an endless check", () => {
+    const html = renderSection(
+      state({
+        stats: { ...createEmptyStats(), totalIntercepted: 3, healedSuccess: 3 },
+        status: "idle",
+        statsStale: true,
+      }),
+    );
+    expect(html).toContain('data-state="stale"');
+    expect(html).toContain("Showing saved data");
+    expect(html).not.toContain("Checking current status");
+  });
+
   it("shows no age before the first load", () => {
     const html = renderSection(
       state({ stats: { ...createEmptyStats(), totalIntercepted: 3 } }),

@@ -114,6 +114,31 @@ body { margin: 0; padding: 24px; background: #ffffff; font-family: system-ui, -a
         </div>
       </div>
     </div>
+    <div class="dsh_td_outcomeCard" data-state="checking">
+      <div class="dsh_td_outcomeStatus">
+        <span class="dsh_td_statusDot dsh_td_statusDotChecking" aria-hidden="true"></span>
+        <div class="dsh_td_statusCopy">
+          <span class="dsh_td_statusHeadline">Checking current status</span>
+          <span class="dsh_td_statusReason">These numbers are from the last saved snapshot; a first live update is loading.</span>
+        </div>
+      </div>
+      <div class="dsh_td_outcomeEvidence">
+        <div class="dsh_td_outcomePrimary">
+          <span class="dsh_td_outcomeValue dsh_td_kpiValueSuccess">3</span>
+          <span class="dsh_td_outcomeCaption">calls repaired</span>
+          <span class="dsh_td_outcomeRateRow">
+            <span class="dsh_td_kpiMeter"><span class="dsh_td_kpiMeterFill" style="width:100%"></span></span>
+            <span class="dsh_td_kpiDesc">100% of repair attempts succeeded.</span>
+          </span>
+        </div>
+        <div class="dsh_td_outcomeSplit">
+          <div class="dsh_td_outcomeSplitItem">
+            <span class="dsh_td_outcomeSplitValue">0</span>
+            <span class="dsh_td_outcomeSplitLabel">calls that failed</span>
+          </div>
+        </div>
+      </div>
+    </div>
     <div class="dsh_td_kpiGrid">
       <div class="dsh_td_kpiCard dsh_td_kpiCardSmall"><span class="dsh_td_kpiTitle">Calls checked</span><span class="dsh_td_kpiValue">146</span></div>
       <div class="dsh_td_kpiCard dsh_td_kpiCardSmall"><span class="dsh_td_kpiTitle">Promoted calls</span><span class="dsh_td_kpiValue dsh_td_kpiValueAccent">4</span></div>
