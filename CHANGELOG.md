@@ -2,6 +2,30 @@
 
 ## Unreleased (2026-11-14)
 
+- **A heal can no longer be swallowed by the host's serialization gate.** The
+  live pass caught a clamped read-offset retry whose repaired result came back
+  as the bare host error "tool result must be losslessly JSON-serializable",
+  hiding both the original error and the repair. Root cause: the host snapshots
+  every settled result through a lossless-JSON walker that rejects class
+  instances — and the doctor's own `recoveryFailure()` attaches the live
+  `Error` as `error`, so the projection threw and replaced the WHOLE payload.
+  Two fixes, both inside the doctor. (1) `projectForHost()` in `core/result.ts`
+  mirrors the host's walker (`isPlainJsonValue`) and runs at the `tools/execute`
+  boundary: plain results pass untouched; otherwise model-visible `content` is
+  kept (text fallback only if content itself is unprojectable) and lossy
+  `error`/`meta`/`additionalContexts` are dropped or reduced to their plain
+  `{code, message}` identity — `resultHasCode` still matches. Records are
+  stashed before the boundary, so nothing is lost to the log. (2) The range
+  stage now applies do-no-harm: a retry that still fails never replaces the
+  original error — the model keeps the message naming the bound it can act on,
+  while the record honestly stays repaired-but-failed. Same pass also closed
+  the observed gap that schema-capping rejections (`limit must be less than or
+  equal to 2000`, which no clamp shape matched) are now retried at the stated
+  cap (`argMaxFromError`). New tests: `range-retry.spec.ts` (14 — both error
+  shapes, retry args, do-no-harm incl. two through the full pipeline) and
+  `result-projection.spec.ts` (9 — the walker rules, the identity-preserving
+  swaps, double-projection safety). Suite: 430 green.
+
 - **Factory guidance rewritten to "## Reliable tool calls".** The prompt
   contribution now leads with host-structured tool calls (no simulated tags
   in response text), exact names and schemas (description only where the

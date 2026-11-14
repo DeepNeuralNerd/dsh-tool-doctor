@@ -18,7 +18,7 @@ import {
   runPipeline,
   type PipelineOutcome,
 } from "./core/pipeline.ts";
-import { dispatchStatus, errorText, resultErrorText } from "./core/result.ts";
+import { dispatchStatus, errorText, projectForHost, resultErrorText } from "./core/result.ts";
 import { objectValue, sessionCwd } from "./core/util.ts";
 import { CATEGORY_META } from "./stages/index.ts";
 import { candidatesFromAggregates } from "./support/error-signatures.ts";
@@ -615,7 +615,11 @@ export function apply(ctxRaw: unknown, userConfig: Partial<DoctorConfig> = {}): 
         },
         exec.agent,
       );
-      return outcome.result;
+      // Hand the host a result its durable projection accepts: a live Error
+      // on a healed result (the one object the doctor itself can attach) is
+      // rejected as lossy and replaces the whole payload with a serialization
+      // TypeError, hiding the real outcome from the model.
+      return projectForHost(outcome.result);
     },
   );
 
