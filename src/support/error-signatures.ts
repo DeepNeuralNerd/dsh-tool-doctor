@@ -145,8 +145,9 @@ export function fixEligible(count: number, firstSeen: number, lastSeen: number):
  * Error-text hints toward an existing rule for failures no rule processed.
  * Narrow by design: a hint claims "this rule's territory was skipped", so a
  * false hint is worse than none — a truly new pattern must read as new.
+ * Exported for the client-mirror parity test (src/client/mirror.ts).
  */
-const TEXT_RULE_HINTS: ReadonlyArray<{ rule: number; test: RegExp }> = [
+export const TEXT_RULE_HINTS: ReadonlyArray<{ rule: number; test: RegExp }> = [
   { rule: 1, test: /\brun_code\b|run[- ]code\s+(?:code|description)/i },
   { rule: 2, test: /unknown tool|tool .*not (?:found|registered)/i },
   { rule: 3, test: /view_range|line (?:range|count)|out[- ]of[- ]range/i },
@@ -191,7 +192,7 @@ export function normalizeErrorSignature(errorMessage: string): string {
 }
 
 /** Rule number whose territory the text hints at, when any does. */
-function hintRule(errorMessage: string): number | undefined {
+export function hintRule(errorMessage: string): number | undefined {
   for (const { rule, test } of TEXT_RULE_HINTS) {
     if (test.test(errorMessage)) return rule;
   }

@@ -2,6 +2,18 @@
 
 ## Unreleased (2026-11-14)
 
+- **Guarded client mirror**: the dashboard's taxonomy tables and
+  candidate-fix logic moved from `DoctorSection.tsx` to
+  `src/client/mirror.ts` (pure, React-free), typed as `Record` over
+  `HealCategory`/`ConfigFlag` (missing entries = compile error), and pinned
+  against the server originals by `tests/client-mirror.spec.ts` — labels
+  (one derivation rule: server label minus the "(CATEGORY)" suffix),
+  category order, rule/flag tables in registry order, hint patterns, and
+  behavioral parity of `proposeFix`/`fixEligible`/`hintRule`/
+  `normalizeErrorSignature`. The guard immediately caught real drift:
+  ARGS_UNWRAP/ARGS_TYPE/PATH_SEPARATORS/KIND_CORRECTION label wording and
+  rule 1's flag order (which decides which toggle a fix proposal names).
+
 New healing rules, informed by the tool-failure literature (parameter-failure
 taxonomies, verify-before-retry, tiered scope-limited recovery):
 
