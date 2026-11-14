@@ -2,6 +2,27 @@
 
 ## Unreleased (2026-11-14)
 
+- **Nested recovery now dispatches through the host's batch API (it was
+  failing silently before).** Live records showed every range/edit/name retry
+  ending in "retry still failed (Tool batch execution failed) — original
+  error kept": the do-no-harm path kept the model's error honest, but the
+  nested dispatch itself never succeeded. Root cause, read from the installed
+  host: `ToolsService` exposes exactly one `execute`, and it is a BATCH —
+  `execute(input: ToolBatchInput): Promise<ToolBatchResult>` with
+  `ToolBatchInput = { calls: ToolCallBlock[]; signal; agent? }` and each
+  `ToolCallBlock = { type:"tool-call", id, name, arguments: string }` (raw
+  JSON). The doctor had been calling it with a single `{ name, arguments }`
+  execution, so `executeToolBatch` did `const { calls } = input; calls.map(...)`
+  on `undefined`, threw, and the runner rewrapped it as `ToolBatchExecutionError`
+  ("Tool batch execution failed"). `recovery/nested-dispatch.ts` now sends the
+  correct single-call batch and unwraps `results[0]` as the recovery outcome;
+  a batch that settles no result is an explicit recovery failure. The execution
+  token is no longer required (the batch contract never used it). All test
+  fakes were converted to the batch shape via a shared `batchTools` helper; the
+  `arguments`/`results` round-trip is now exercised end to end. This is the
+  change that lets nested heals actually land — before it, every one fell back
+  to do-no-harm. Suite: 432 green.
+
 - **A heal can no longer be swallowed by the host's serialization gate.** The
   live pass caught a clamped read-offset retry whose repaired result came back
   as the bare host error "tool result must be losslessly JSON-serializable",

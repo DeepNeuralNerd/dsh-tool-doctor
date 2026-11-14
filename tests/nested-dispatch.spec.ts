@@ -5,9 +5,11 @@ import { executeBridgeDirectCall, isBridgeableDirectCall } from "../src/recovery
 function makeTools(executed: Array<{ name: string; arguments: unknown }>) {
   return {
     get: (name: string) => ({ name }), // every tool visible in scope
-    execute: async (input: { name: string; arguments: unknown }) => {
-      executed.push({ name: input.name, arguments: input.arguments });
-      return { content: [{ type: "text", text: `ok:${input.name}` }] };
+    // The host accepts batches; a recovery arrives as one call with JSON args.
+    execute: async (input: { calls: Array<{ name: string; arguments: string }> }) => {
+      const block = input.calls[0];
+      executed.push({ name: block.name, arguments: JSON.parse(block.arguments) });
+      return { results: [{ content: [{ type: "text", text: `ok:${block.name}` }] }] };
     },
   } as never;
 }
@@ -69,6 +71,44 @@ describe("executeNestedTool", () => {
     const result = await executeNestedTool(parent, tools, "read", {}, "x");
     expect(result.isError).toBe(true);
     expect(executed.length).toBe(0);
+  });
+
+  it("returns a recovery failure when the batch settles no result", async () => {
+    const tools = {
+      get: (n: string) => ({ name: n }),
+      execute: async () => ({ results: [] }),
+    } as never;
+    const parent = {
+      callId: "call_1",
+      signal: new AbortController().signal,
+    } as never;
+    const result = await executeNestedTool(parent, tools, "read", {}, "x");
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain("settled no result");
+  });
+
+  it("sends the documented single-call batch shape", async () => {
+    let seen: { calls: Array<Record<string, unknown>>; signal: unknown } | undefined;
+    const tools = {
+      get: (n: string) => ({ name: n }),
+      execute: async (input: typeof seen) => {
+        seen = input;
+        return { results: [{ content: [{ type: "text", text: "ok" }] }] };
+      },
+    } as never;
+    const parent = {
+      name: "read",
+      callId: "call_1",
+      signal: new AbortController().signal,
+    } as never;
+
+    await executeNestedTool(parent, tools, "read", { file_path: "/a.txt" }, "range-retry");
+    expect(seen).toBeDefined();
+    const block = seen?.calls[0];
+    expect(block?.type).toBe("tool-call");
+    expect(block?.id).toContain(":doctor:range-retry");
+    expect(JSON.parse(String(block?.arguments))).toEqual({ file_path: "/a.txt" });
+    expect(seen?.signal).toBeInstanceOf(Object); // cancellation carried over
   });
 
   it("wraps a thrown host error into a recovery failure instead of throwing", async () => {
@@ -145,12 +185,12 @@ describe("executeBridgeDirectCall", () => {
     expect(executed[0].name).toBe("bash");
   });
 
-  it("fails explicitly when the execution token is missing", async () => {
+  it("dispatches without an execution token (the batch API never needed one)", async () => {
     const executed: Array<{ name: string; arguments: unknown }> = [];
     const tools = makeTools(executed);
     const exec = { callId: "call_9", name: "bash", signal: new AbortController().signal } as never;
     const result = await executeBridgeDirectCall(exec, tools);
-    expect(result.isError).toBe(true);
-    expect(executed.length).toBe(0);
+    expect(result.isError).toBeUndefined();
+    expect(executed.length).toBe(1);
   });
 });

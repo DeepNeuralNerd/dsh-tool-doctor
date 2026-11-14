@@ -83,10 +83,5 @@ export async function executeBridgeDirectCall(
       `Cannot recover '${exec.name}': the original cancellation signal is unavailable.`,
     );
   }
-  if (exec.token === undefined) {
-    return recoveryFailure(
-      `Cannot recover '${exec.name}': the original execution token is unavailable.`,
-    );
-  }
   return executeNestedTool(exec, tools, exec.name, exec.arguments ?? {}, `bridge-${exec.name}`);
 }

@@ -49,6 +49,26 @@ function textResult(text: string): ToolExecutionResult {
   return { content: [{ type: "text", text }] };
 }
 
+/**
+ * Fake ToolsService.execute: the host accepts BATCHES only, so a nested
+ * recovery arrives as a single-call batch with model-shaped (JSON-string)
+ * arguments and must settle through `results`.
+ */
+function batchTools(
+  reply: (name: string, args: Record<string, unknown>) => ToolExecutionResult,
+  capture?: Array<{ name: string; arguments: unknown }>,
+): never {
+  return {
+    get: (name: string) => ({ name }),
+    execute: async (input: { calls: Array<{ name: string; arguments: string }> }) => {
+      const block = input.calls[0];
+      const args = JSON.parse(block.arguments) as Record<string, unknown>;
+      capture?.push({ name: block.name, arguments: args });
+      return { results: [reply(block.name, args)] };
+    },
+  } as never;
+}
+
 describe("runPipeline — pass-through", () => {
   it("leaves a healthy call untouched (PASSTHROUGH, no heal claim)", async () => {
     const exec = makeExec({ name: "read", arguments: { file_path: "/a.txt" } });
@@ -133,13 +153,7 @@ describe("runPipeline — pre-dispatch repair", () => {
 describe("runPipeline — post-dispatch recovery", () => {
   it("bridges an UNKNOWN_TOOL direct call through the host runtime (terminal)", async () => {
     const executed: Array<{ name: string; arguments: unknown }> = [];
-    const tools = {
-      get: (name: string) => ({ name }),
-      execute: async (input: { name: string; arguments: unknown }) => {
-        executed.push({ name: input.name, arguments: input.arguments });
-        return textResult(`bridged:${input.name}`);
-      },
-    } as never;
+    const tools = batchTools((name) => textResult(`bridged:${name}`), executed);
 
     const exec = makeExec({ name: "bash", arguments: { command: "ls" } });
     const outcome = await runPipeline(
@@ -163,13 +177,7 @@ describe("runPipeline — post-dispatch recovery", () => {
 
   it("retries a read offset past EOF clamped to the real line count", async () => {
     let nestedCalls: Array<{ name: string; arguments: unknown }> = [];
-    const tools = {
-      get: (name: string) => ({ name }),
-      execute: async (input: { name: string; arguments: unknown }) => {
-        nestedCalls.push({ name: input.name, arguments: input.arguments });
-        return textResult("tail lines");
-      },
-    } as never;
+    const tools = batchTools(() => textResult("tail lines"), nestedCalls);
 
     const exec = makeExec({ name: "read", arguments: { file_path: "/a.txt", offset: 99 } });
     let first = true;
@@ -290,14 +298,8 @@ describe("runPipeline — shadow mode", () => {
   });
 
   it("runs no post-dispatch recovery and appends no hint", async () => {
-    const nested: unknown[] = [];
-    const tools = {
-      get: (name: string) => ({ name }),
-      execute: async (input: unknown) => {
-        nested.push(input);
-        return textResult("bridged");
-      },
-    } as never;
+    const nested: Array<{ name: string; arguments: unknown }> = [];
+    const tools = batchTools(() => textResult("bridged"), nested);
     const exec = makeExec({ name: "bash", arguments: { command: "ls" } });
     const outcome = await runPipeline(
       exec,
@@ -336,13 +338,7 @@ describe("runPipeline — thrown dispatches", () => {
 
   it("bridges a thrown UNKNOWN_TOOL before re-throwing", async () => {
     const executed: Array<{ name: string; arguments: unknown }> = [];
-    const tools = {
-      get: (name: string) => ({ name }),
-      execute: async (input: { name: string; arguments: unknown }) => {
-        executed.push({ name: input.name, arguments: input.arguments });
-        return textResult(`bridged:${input.name}`);
-      },
-    } as never;
+    const tools = batchTools((name) => textResult(`bridged:${name}`), executed);
 
     const exec = makeExec({ name: "bash", arguments: { command: "ls" } });
     const outcome = await runPipeline(
@@ -363,13 +359,7 @@ describe("runPipeline — thrown dispatches", () => {
 describe("runPipeline — whitespace-tolerant edit retry (rule 4, EDIT_WHITESPACE)", () => {
   it("retries a not-found edit with the line-ending-equivalent anchor and settles", async () => {
     const nested: Array<{ name: string; arguments: unknown }> = [];
-    const tools = {
-      get: (name: string) => ({ name }),
-      execute: async (input: { name: string; arguments: unknown }) => {
-        nested.push({ name: input.name, arguments: input.arguments });
-        return textResult("patched");
-      },
-    } as never;
+    const tools = batchTools(() => textResult("patched"), nested);
 
     const exec = makeExec({
       name: "edit",
@@ -399,18 +389,15 @@ describe("runPipeline — whitespace-tolerant edit retry (rule 4, EDIT_WHITESPAC
 
   it("keeps the original not-found error authoritative when every variant fails", async () => {
     const nested: Array<{ name: string; arguments: unknown }> = [];
-    const tools = {
-      get: (name: string) => ({ name }),
-      execute: async (input: { name: string; arguments: unknown }) => {
-        nested.push({ name: input.name, arguments: input.arguments });
-        return {
-          isError: true,
-          error: Object.assign(new Error("old_string not found in file"), {
-            code: "FS_EDIT_NOT_FOUND",
-          }),
-        };
-      },
-    } as never;
+    const tools = batchTools(
+      () => ({
+        isError: true,
+        error: Object.assign(new Error("old_string not found in file"), {
+          code: "FS_EDIT_NOT_FOUND",
+        }),
+      }),
+      nested,
+    );
 
     const exec = makeExec({
       name: "edit",
@@ -466,9 +453,10 @@ describe("runPipeline — routing & kind rules (2 / 10) and the truncation hint"
       // Name drift means NO exact registered name — the bridge must pass.
       get: () => undefined,
       schemas: () => [{ name: "run_code" }, { name: "mcp__shell__bash" }, { name: "read" }],
-      execute: async (input: { name: string; arguments: unknown }) => {
-        nested.push({ name: input.name, arguments: input.arguments });
-        return textResult(`ran:${input.name}`);
+      execute: async (input: { calls: Array<{ name: string; arguments: string }> }) => {
+        const block = input.calls[0];
+        nested.push({ name: block.name, arguments: JSON.parse(block.arguments) });
+        return { results: [textResult(`ran:${block.name}`)] };
       },
     } as never;
 
@@ -496,9 +484,9 @@ describe("runPipeline — routing & kind rules (2 / 10) and the truncation hint"
     const tools = {
       get: () => undefined,
       schemas: () => [{ name: "mcp__a__bash" }, { name: "mcp__b__bash" }],
-      execute: async (input: { name: string }) => {
-        nested.push({ name: input.name });
-        return textResult("unreachable");
+      execute: async (input: { calls: Array<{ name: string }> }) => {
+        nested.push({ name: input.calls[0].name });
+        return { results: [textResult("unreachable")] };
       },
     } as never;
 
@@ -524,8 +512,12 @@ describe("runPipeline — routing & kind rules (2 / 10) and the truncation hint"
       get: () => undefined,
       schemas: () => [{ name: "mcp__shell__bash" }],
       execute: async () => ({
-        isError: true,
-        error: new Error("command failed: ls: /nope: No such file or directory"),
+        results: [
+          {
+            isError: true,
+            error: new Error("command failed: ls: /nope: No such file or directory"),
+          },
+        ],
       }),
     } as never;
 
@@ -555,10 +547,14 @@ describe("runPipeline — routing & kind rules (2 / 10) and the truncation hint"
       get: () => undefined,
       schemas: () => [{ name: "mcp__shell__bash" }], // enumeration is stale
       execute: async () => ({
-        isError: true,
-        error: Object.assign(new Error("Unknown tool: mcp__shell__bash"), {
-          code: "UNKNOWN_TOOL",
-        }),
+        results: [
+          {
+            isError: true,
+            error: Object.assign(new Error("Unknown tool: mcp__shell__bash"), {
+              code: "UNKNOWN_TOOL",
+            }),
+          },
+        ],
       }),
     } as never;
 
@@ -593,9 +589,10 @@ describe("runPipeline — routing & kind rules (2 / 10) and the truncation hint"
             }
           : undefined,
       schemas: () => [{ name: "read" }, { name: "list_directory" }],
-      execute: async (input: { name: string; arguments: unknown }) => {
-        nested.push({ name: input.name, arguments: input.arguments });
-        return textResult("file1.txt\nfile2.txt");
+      execute: async (input: { calls: Array<{ name: string; arguments: string }> }) => {
+        const block = input.calls[0];
+        nested.push({ name: block.name, arguments: JSON.parse(block.arguments) });
+        return { results: [textResult("file1.txt\nfile2.txt")] };
       },
     } as never;
 
@@ -622,7 +619,7 @@ describe("runPipeline — routing & kind rules (2 / 10) and the truncation hint"
     const tools = {
       get: () => undefined,
       schemas: () => [{ name: "read" }, { name: "write" }],
-      execute: async () => textResult("unreachable"),
+      execute: async () => ({ results: [textResult("unreachable")] }),
     } as never;
 
     const outcome = await runPipeline(

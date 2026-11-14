@@ -65,15 +65,35 @@ export interface ToolExecutionResult {
 
 // ── Runtime contracts ────────────────────────────────────────────────────────
 
-/** Input accepted by the host runtime for a nested dispatch. */
-export interface ToolExecutionInput {
-  callId: string;
-  rootCallId?: string;
+/** One model-shaped call block inside the host's batch execution input. */
+export interface ToolCallBlock {
+  type: "tool-call";
+  id: string;
   name: string;
-  arguments: unknown;
-  agent?: unknown;
-  parent?: unknown;
+  /** Raw model arguments — the batch runner parses JSON itself. */
+  arguments: string;
+}
+
+/**
+ * Input accepted by the host runtime for a nested dispatch. The host
+ * ToolsService exposes exactly ONE execute, and it takes a batch:
+ * `execute(input: ToolBatchInput): Promise<ToolBatchResult>` (verified against
+ * the installed API declarations). The documented way to run a single child
+ * call is a single-call batch; the previous single-call object this plugin
+ * sent had no `calls` list and died inside the batch runner as
+ * "Tool batch execution failed".
+ */
+export interface ToolBatchInput {
+  calls: ToolCallBlock[];
   signal: AbortSignal;
+  agent?: unknown;
+}
+
+/** What the host batch runner settles; one result per submitted call, in order. */
+export interface ToolBatchResult {
+  results: ToolExecutionResult[];
+  additionalContexts?: unknown[];
+  concluded?: boolean;
 }
 
 /**
@@ -84,8 +104,8 @@ export interface ToolExecutionInput {
 export interface ToolRuntime {
   /** Look up a tool definition in scope; undefined when unregistered there. */
   get(name: string, scope?: unknown): unknown;
-  /** Re-enter the host's complete execution pipeline with a child call. */
-  execute?(execution: ToolExecutionInput): Promise<ToolExecutionResult>;
+  /** Re-enter the host's complete execution pipeline with a single-call batch. */
+  execute?(input: ToolBatchInput): Promise<ToolBatchResult>;
   /**
    * Enumerate the tool schemas callable in `scope` — the host ToolsService
    * method (`schemas(scope?, toolSet?): ToolSchema[]`, verified against the
