@@ -1,5 +1,7 @@
 # Tool doctor
 
+[![release](https://img.shields.io/github/v/release/DeepNeuralNerd/dsh-tool-doctor?label=release&color=3E9EA0)](https://github.com/DeepNeuralNerd/dsh-tool-doctor/releases) [![downloads](https://img.shields.io/github/downloads/DeepNeuralNerd/dsh-tool-doctor/total?label=downloads&color=3E8E6A)](https://github.com/DeepNeuralNerd/dsh-tool-doctor/releases) [![license](https://img.shields.io/badge/license-MIT-64748B)](LICENSE)
+
 **Fewer failed tool calls. Less backtracking.**
 
 An AI assistant can understand your task and still stumble over a tool request: a line number past the end of a file, a number supplied as text, or an edit that misses because its spacing changed. Tool doctor catches **supported, mechanical mistakes** in DeepSeek Harness (DSH), corrects the request or retries a recoverable error, and records what happened. You spend less time watching the assistant repeat a call it could have fixed.
