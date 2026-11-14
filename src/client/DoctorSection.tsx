@@ -19,6 +19,7 @@ import { previewsUnchanged } from "./json-format.ts";
 import {
   CATEGORY_LABELS,
   CATEGORY_ORDER,
+  CATEGORY_TO_FLAG,
   CATEGORY_TO_RULE,
   FIX_PROPOSE_MIN_COUNT,
   FIX_PROPOSE_MIN_SPAN_MS,
@@ -36,7 +37,9 @@ import {
   type DoctorErrorSource,
   type DoctorState,
   type DoctorStore,
+  type DoctorTab,
   type NormalizerRecord,
+  type NormalizerStats,
 } from "./store.ts";
 import styles from "./DoctorSection.module.css";
 
@@ -376,6 +379,9 @@ export function OutcomeTrend({ records, t }: { records: NormalizerRecord[]; t: T
   }
   const okTotal = buckets.reduce((s, b) => s + b.ok, 0);
   const badTotal = buckets.reduce((s, b) => s + b.bad, 0);
+  const failedTimes = counted.filter((r) => r.status === "failed").map((r) => r.time);
+  const direction = trendDirection(failedTimes, from, to);
+  const spanText = `${new Date(from).toLocaleTimeString()} – ${new Date(to).toLocaleTimeString()}`;
   return (
     <div className={styles.trendWrap}>
       <svg
@@ -383,7 +389,7 @@ export function OutcomeTrend({ records, t }: { records: NormalizerRecord[]; t: T
         viewBox={`0 0 ${W} ${H}`}
         preserveAspectRatio="none"
         role="img"
-        aria-label={`${new Date(from).toLocaleTimeString()} – ${new Date(to).toLocaleTimeString()}: ${okTotal} ${t("trendRepaired")}, ${badTotal} ${t("trendFailed")}`}
+        aria-label={`${spanText}: ${okTotal} ${t("trendRepaired")}, ${badTotal} ${t("trendFailed")}, ${counted.length} ${t("trendEvents")}${direction ? `, ${t(TREND_DIRECTION_KEY[direction])}` : ""}`}
       >
         {buckets.map((b, i) => {
           const x = i * slot + slot * 0.18;
@@ -408,9 +414,12 @@ export function OutcomeTrend({ records, t }: { records: NormalizerRecord[]; t: T
           {t("trendFailed")}
         </span>
         <span className={styles.trendSpan}>
-          {new Date(from).toLocaleTimeString()} – {new Date(to).toLocaleTimeString()}
+          {spanText} · {counted.length} {t("trendEvents")}
         </span>
       </div>
+      <p className={styles.trendSummary}>
+        {direction ? t(TREND_DIRECTION_KEY[direction]) : t("trendSparse")}
+      </p>
     </div>
   );
 }
@@ -443,6 +452,85 @@ export function candidateDomId(key: string): string {
   return `doctor-cand-${encodeURIComponent(key)}`;
 }
 
+// ── Panel status: the plain answer to "is it working, must I act?" ──────────
+
+export type PanelState = "waiting" | "ok" | "attention" | "paused";
+
+/**
+ * One headline state for the outcome card, derived in honest order of
+ * severity: paused repairs (open circuit breakers) outrank unrecovered
+ * failures, which outrank a clean log; an empty log waits. The repair count
+ * and rate stay as evidence beneath it.
+ */
+export function derivePanelState(stats: NormalizerStats): PanelState {
+  if (stats.breakerOpen.length > 0) return "paused";
+  if (stats.healedFailed + stats.passThroughFailed > 0) return "attention";
+  if (stats.totalIntercepted > 0) return "ok";
+  return "waiting";
+}
+
+const STATUS_HEADLINE: Readonly<Record<PanelState, NormalizerKey>> = {
+  waiting: "statusWaiting",
+  ok: "statusOk",
+  attention: "statusAttention",
+  paused: "statusPaused",
+};
+
+const STATUS_DOT: Readonly<Record<PanelState, string>> = {
+  waiting: styles.statusDotWaiting,
+  ok: styles.statusDotOk,
+  attention: styles.statusDotAttention,
+  paused: styles.statusDotPaused,
+};
+
+/** Coarse age of the shown snapshot, bucketed so the wording never jitters. */
+export function eventAge(nowMs: number, thenMs: number): { key: NormalizerKey; n: number } {
+  const mins = Math.max(0, Math.floor((nowMs - thenMs) / 60000));
+  if (mins < 1) return { key: "updatedJustNow", n: 0 };
+  if (mins < 60) return { key: "updatedMinutes", n: mins };
+  if (mins < 60 * 24) return { key: "updatedHours", n: Math.floor(mins / 60) };
+  return { key: "updatedDays", n: Math.floor(mins / (60 * 24)) };
+}
+
+/**
+ * One-sentence direction for the trend, claimed only with enough failures to
+ * honestly have one: failures before vs after the window's midpoint. A shared
+ * timestamp (to === from) can carry no direction.
+ */
+export function trendDirection(
+  failedTimes: readonly number[],
+  from: number,
+  to: number,
+): "up" | "down" | "flat" | null {
+  if (failedTimes.length < 4 || to <= from) return null;
+  const mid = (from + to) / 2;
+  let before = 0;
+  let after = 0;
+  for (const t of failedTimes) {
+    if (t < mid) before += 1;
+    else after += 1;
+  }
+  if (after >= before + 2 && after >= 2) return "up";
+  if (before >= after + 2 && before >= 2) return "down";
+  return "flat";
+}
+
+const TREND_DIRECTION_KEY: Readonly<Record<"up" | "down" | "flat", NormalizerKey>> = {
+  up: "trendUp",
+  down: "trendDown",
+  flat: "trendFlat",
+};
+
+/** Categories a config flag gates — inverse of the mirror's CATEGORY_TO_FLAG. */
+const FLAG_CATEGORIES: Readonly<Record<string, readonly string[]>> = (() => {
+  const map: Record<string, string[]> = {};
+  for (const [category, flag] of Object.entries(CATEGORY_TO_FLAG)) {
+    if (flag === undefined) continue;
+    (map[flag] ??= []).push(category);
+  }
+  return map;
+})();
+
 function idleState(): DoctorState {
   return {
     status: "idle",
@@ -456,6 +544,7 @@ function idleState(): DoctorState {
     guidance: { text: null, defaultText: null },
     guidanceLoading: false,
     error: null,
+    lastUpdated: null,
   };
 }
 
@@ -475,6 +564,10 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [pendingToggle, setPendingToggle] = useState<string | null>(null);
   const [toggleError, setToggleError] = useState<string | null>(null);
+
+  /** Coarse clock for the snapshot-age line; only needed while data is shown. */
+  const [now, setNow] = useState<number>(() => Date.now());
+  const [confirmingClear, setConfirmingClear] = useState(false);
 
   // Guidance editor local state (draft lives in the component; truth in store).
   const [draftText, setDraftText] = useState("");
@@ -506,7 +599,30 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
 
   const stats = state.stats;
   const hasData = stats.totalIntercepted > 0;
+
+  // Age line needs a coarse heartbeat while a snapshot is on screen.
+  useEffect(() => {
+    if (state.lastUpdated === null) return;
+    setNow(Date.now());
+    const timer = window.setInterval(() => setNow(Date.now()), 30000);
+    return () => window.clearInterval(timer);
+  }, [state.lastUpdated]);
+
+  // A reset (from anywhere) closes an open clear-confirmation.
+  useEffect(() => {
+    if (!hasData) setConfirmingClear(false);
+  }, [hasData]);
   const unrecoveredTotal = stats.healedFailed + stats.passThroughFailed;
+
+  const panelState = derivePanelState(stats);
+  const statusReason =
+    panelState === "paused"
+      ? t("statusPausedReason").replace("{n}", String(stats.breakerOpen.length))
+      : panelState === "attention"
+        ? t("statusAttentionReason").replace("{n}", String(unrecoveredTotal))
+        : panelState === "ok"
+          ? t("statusOkReason")
+          : t("statusWaitingReason");
 
   const filteredRecords = useMemo(
     () =>
@@ -774,15 +890,6 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
           >
             {t("autoRefresh")}
           </button>
-          <button
-            type="button"
-            className={styles.btnDanger}
-            disabled={!hasData}
-            onClick={() => void controller?.reset()}
-          >
-            <span className={styles.btnIcon}><TrashIcon /></span>
-            {t("clear")}
-          </button>
         </div>
       </header>
 
@@ -791,36 +898,59 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
         <p className={styles.apiError} role="alert">{t(ERROR_LINE[state.error.source])}</p>
       )}
 
-      {/* Overview: one outcome card leads (what actually happened to calls);
-          everything secondary sits smaller beneath it. */}
+      {/* Overview: the status answers "working? must I act?"; the numbers
+          beneath are the evidence, everything else sits smaller. */}
       <section className={styles.overview}>
-        <div className={styles.outcomeCard}>
-          <div className={styles.outcomePrimary}>
-            <span className={styles.kpiTitle}>{t("outcomeTitle")}</span>
-            <span className={`${styles.outcomeValue} ${stats.healedSuccess > 0 ? styles.kpiValueSuccess : ""}`}>
-              {stats.healedSuccess}
-            </span>
-            <span className={styles.outcomeRateRow}>
-              <span className={styles.kpiMeter} aria-hidden="true">
-                <span className={styles.kpiMeterFill} style={{ width: `${Math.min(100, stats.healingSuccessRate)}%` }} />
+        <div className={styles.outcomeCard} data-state={panelState}>
+          <div className={styles.outcomeStatus}>
+            <span className={`${styles.statusDot} ${STATUS_DOT[panelState]}`} aria-hidden="true" />
+            <div className={styles.statusCopy}>
+              <span className={styles.statusHeadline}>{t(STATUS_HEADLINE[panelState])}</span>
+              <span className={styles.statusReason}>{statusReason}</span>
+              <span className={styles.statusMeta}>
+                {state.error?.source === "stats" && hasData ? (
+                  <span className={styles.statusStale}>{t("connLost")}</span>
+                ) : state.lastUpdated !== null && hasData ? (
+                  (() => {
+                    const age = eventAge(now, state.lastUpdated);
+                    return <span>{t(age.key).replace("{n}", String(age.n))}</span>;
+                  })()
+                ) : null}
               </span>
-              <span className={styles.kpiDesc}>
-                {t("outcomeRepairedNote")} {stats.healingSuccessRate}% {t("kpiRateSuffix")}
-              </span>
-            </span>
-          </div>
-          <div className={styles.outcomeSplit}>
-            <div className={styles.outcomeSplitItem}>
-              <span className={`${styles.outcomeSplitValue} ${stats.healedFailed > 0 ? styles.kpiValueDanger : ""}`}>
-                {stats.healedFailed}
-              </span>
-              <span className={styles.outcomeSplitLabel}>{t("outcomeFailedRepairs")}</span>
             </div>
-            <div className={styles.outcomeSplitItem}>
-              <span className={`${styles.outcomeSplitValue} ${stats.passThroughFailed > 0 ? styles.kpiValueDanger : ""}`}>
-                {stats.passThroughFailed}
+            {panelState === "attention" && (
+              <button type="button" className={styles.statusAction} onClick={() => controller?.setActiveTab("errors")}>
+                {t("actViewErrors")}
+              </button>
+            )}
+            {panelState === "paused" && (
+              <button type="button" className={styles.statusAction} onClick={() => controller?.setActiveTab("rules")}>
+                {t("actViewRules")}
+              </button>
+            )}
+          </div>
+          <div className={styles.outcomeEvidence}>
+            <div className={styles.outcomePrimary}>
+              <span className={`${styles.outcomeValue} ${stats.healedSuccess > 0 ? styles.kpiValueSuccess : ""}`}>
+                {stats.healedSuccess}
               </span>
-              <span className={styles.outcomeSplitLabel}>{t("outcomePassThroughFailed")}</span>
+              <span className={styles.outcomeCaption}>{t("outcomeRepairedCaption")}</span>
+              <span className={styles.outcomeRateRow}>
+                <span className={styles.kpiMeter} aria-hidden="true">
+                  <span className={styles.kpiMeterFill} style={{ width: `${Math.min(100, stats.healingSuccessRate)}%` }} />
+                </span>
+                <span className={styles.kpiDesc}>
+                  {stats.healingSuccessRate}% {t("kpiRateSuffix")}
+                </span>
+              </span>
+            </div>
+            <div className={styles.outcomeSplit}>
+              <div className={styles.outcomeSplitItem}>
+                <span className={`${styles.outcomeSplitValue} ${unrecoveredTotal > 0 ? styles.kpiValueDanger : ""}`}>
+                  {unrecoveredTotal}
+                </span>
+                <span className={styles.outcomeSplitLabel}>{t("outcomeStillFailing")}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -1184,10 +1314,30 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
                   {cards.map(({ flag, titleKey, descKey }) => {
                     const on = state.config ? state.config[flag] !== false : true;
                     const pending = pendingToggle === flag;
+                    // Diagnosis and control meet at the switch: a paused
+                    // breaker shows right at the rule it governs.
+                    const categories = FLAG_CATEGORIES[flag] ?? [];
+                    const pausedHere = categories.some((c) => stats.breakerOpen.includes(c));
+                    let ruleTotal = 0;
+                    let ruleFailed = 0;
+                    let ruleFired: number | undefined;
+                    for (const c of categories) {
+                      ruleTotal += stats.byCategory[c] ?? 0;
+                      ruleFailed += stats.failuresByCategory[c] ?? 0;
+                      const f = lastFiredByCategory.get(c);
+                      if (f !== undefined && (ruleFired === undefined || f > ruleFired)) ruleFired = f;
+                    }
                     return (
                       <article key={flag} className={styles.ruleCard}>
                         <div className={styles.ruleHead}>
-                          <h3 className={styles.ruleTitle}>{t(titleKey)}</h3>
+                          <div className={styles.ruleNameGroup}>
+                            <h3 className={styles.ruleTitle}>{t(titleKey)}</h3>
+                            {pausedHere && (
+                              <span className={styles.pausedChip} title={t("breakerOpenHint")}>
+                                {t("rulePausedChip")}
+                              </span>
+                            )}
+                          </div>
                           <button
                             type="button"
                             role="switch"
@@ -1204,6 +1354,24 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
                           </button>
                         </div>
                         <p className={styles.kpiDesc}>{t(descKey)}</p>
+                        {(pausedHere || ruleTotal > 0) && (
+                          <details className={styles.ruleDetails}>
+                            <summary>{t("ruleDetailsToggle")}</summary>
+                            {pausedHere && <p className={styles.rulePausedNote}>{t("rulePausedNote")}</p>}
+                            <p className={styles.ruleDetailLine}>
+                              {ruleTotal} {t("ruleHealthTotal")}
+                              {ruleFailed > 0 && (
+                                <span className={styles.catFailed}> · {ruleFailed} {t("ruleHealthFailed")}</span>
+                              )}
+                              {ruleFired !== undefined && (
+                                <span className={styles.lastFired}>
+                                  {" · "}{t("lastFiredPrefix")} {new Date(ruleFired).toLocaleTimeString()}
+                                </span>
+                              )}
+                            </p>
+                            <p className={styles.ruleIdLine}>{flag} · {categories.join(", ")}</p>
+                          </details>
+                        )}
                       </article>
                     );
                   })}
@@ -1212,9 +1380,11 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
             );
           })}
 
-          {/* Per-category rule health from the 14 recordable categories */}
-          <div className={styles.rankCard}>
-            <div className={styles.cardTitle}>{t("ruleHealthTitle")}</div>
+          {/* Full per-category health — behind a disclosure, for people
+              investigating rather than deciding. */}
+          <details className={styles.healthDetails}>
+            <summary className={styles.healthSummary}>{t("ruleHealthTitle")}</summary>
+            <div className={styles.rankCard}>
             <ul className={styles.catList}>
               {CATEGORY_ORDER.map((category) => {
                 const total = stats.byCategory[category] ?? 0;
@@ -1239,12 +1409,12 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
                   </li>
                 );
               })}
-            </ul>
-          </div>
+              </ul>
+            </div>
+          </details>
 
           {/* Guidance editor */}
-          <section className={styles.guidanceEditor}>
-            <header className={styles.guidanceHeader}>
+          <section className={styles.guidanceEditor}>            <header className={styles.guidanceHeader}>
               <div className={styles.guidanceTitleGroup}>
                 <span className={styles.guidanceIcon} aria-hidden="true"><PulseIcon /></span>
                 <div>
@@ -1314,6 +1484,48 @@ export function DoctorSection(props: DoctorSectionProps): ReactElement {
               )}
             </div>
           </section>
+
+          {/* Clearing durable history is rare and irreversible: it lives at
+              the very bottom of the rules, away from Refresh, and confirms by
+              naming exactly what goes away. */}
+          <div className={styles.dangerZone}>
+            <div className={styles.dangerCopy}>
+              <span className={styles.dangerTitle}>{t("clearTitle")}</span>
+              <p className={styles.kpiDesc}>{t("clearDesc")}</p>
+            </div>
+            {confirmingClear && hasData ? (
+              <div className={styles.dangerConfirm} role="group" aria-label={t("clearTitle")}>
+                <p className={styles.dangerConfirmText}>
+                  {t("clearConfirm").replace("{n}", String(stats.totalIntercepted))}
+                </p>
+                <div className={styles.dangerButtons}>
+                  <button type="button" className={styles.btnGhost} onClick={() => setConfirmingClear(false)}>
+                    {t("clearCancel")}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.btnDanger}
+                    onClick={() => {
+                      setConfirmingClear(false);
+                      void controller?.reset();
+                    }}
+                  >
+                    {t("clearConfirmYes")}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className={styles.btnGhost}
+                disabled={!hasData}
+                onClick={() => setConfirmingClear(true)}
+              >
+                <span className={styles.btnIcon}><TrashIcon /></span>
+                {t("clear")}
+              </button>
+            )}
+          </div>
         </section>
       )}
     </div>

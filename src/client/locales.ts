@@ -29,8 +29,8 @@ export const en = {
   tabErrors: "Errors",
   tabRules: "Rules",
 
-  // KPI hero row
-  kpiTotal: "Intercepted calls",
+  // KPI hero row — user language first, diagnostics stay in the descriptions.
+  kpiTotal: "Calls checked",
   kpiTotalDesc: "Cumulative tool dispatches captured by the doctor.",
   kpiRate: "Healing success rate",
   kpiRateDesc: "Share of repair attempts that ended in a successful call.",
@@ -46,23 +46,48 @@ export const en = {
   kpiUnrecovered: "Unrecovered errors",
   kpiUnrecoveredDesc:
     "Failed calls the doctor could not resolve — both after a failed repair and without one. Matches the Errors tab.",
-  kpiShadow: "Would repair (shadow)",
+  kpiShadow: "Would have repaired",
   kpiShadowDesc:
-    "Shadow mode matched these rules but dispatched the original arguments — measured coverage, not applied repairs.",
+    "Shadow mode: rules matched but the original arguments went out — measured coverage, not applied repairs.",
+
+  // Outcome status card: the plain answer first, the numbers as evidence.
+  statusWaiting: "Waiting for tool calls",
+  statusWaitingReason: "The doctor starts reporting as soon as the agent calls tools.",
+  statusOk: "Working normally",
+  statusOkReason: "Every recent failure was repaired before the host saw it.",
+  statusAttention: "Needs attention",
+  statusAttentionReason: "{n} calls are still failing.",
+  statusPaused: "Repairs temporarily paused",
+  statusPausedReason:
+    "{n} repair types are paused after repeated failures. They resume on their own when calls succeed again.",
+  actViewErrors: "See failing calls",
+  actViewRules: "Review paused repairs",
+  connLost: "Connection lost — showing saved data.",
+  updatedJustNow: "Updated just now",
+  updatedMinutes: "Updated {n} min ago",
+  updatedHours: "Updated {n} h ago",
+  updatedDays: "Updated {n} d ago",
 
   // Outcome hero card
   outcomeTitle: "Repairs",
   outcomeRepairedNote: "successful repairs —",
+  outcomeRepairedCaption: "calls repaired",
+  outcomeStillFailing: "calls still failing",
   kpiRateSuffix: "of repair attempts succeeded.",
   outcomeFailedRepairs: "failed repairs",
   outcomePassThroughFailed: "unrecovered failures",
   shadowBanner:
-    "Shadow mode is on: matches count as would-repair and the original arguments go out.",
+    "Shadow mode: repairs are counted, but the original arguments are still sent — nothing changes yet.",
 
   // Analytics time trend
   trendTitle: "Recent outcomes",
-  trendDesc: "Repaired vs failed calls across the recorded event window.",
+  trendDesc: "How calls went over the recent recorded window.",
   trendEmpty: "No outcomes recorded in the window yet.",
+  trendEvents: "events",
+  trendUp: "Failures increased in the recent half of this window.",
+  trendDown: "Failures decreased in the recent half of this window.",
+  trendFlat: "Failures held steady across this window.",
+  trendSparse: "Too few failures in this window to judge a direction.",
   trendRepaired: "repaired",
   trendFailed: "failed",
 
@@ -72,7 +97,22 @@ export const en = {
   ruleGroupRecordTitle: "Recording & measurement",
 
   // Circuit-breaker summary (rules tab, top)
-  breakerBarTitle: "Paused by the circuit breaker:",
+  breakerBarTitle: "Repairs temporarily paused:",
+
+  // Per-rule disclosure & paused state
+  rulePausedChip: "Repairs paused",
+  rulePausedNote:
+    "Retries are paused after repeated failures. The rule resumes automatically once calls succeed again.",
+  ruleDetailsToggle: "Recent activity",
+
+  // Clearing durable history (bottom of rules)
+  clearTitle: "Clear records",
+  clearDesc:
+    "Deletes every recorded event and all recurring-error counts. This cannot be undone.",
+  clearConfirm:
+    "This deletes {n} recorded events and all recurring-error counts. It cannot be undone.",
+  clearConfirmYes: "Clear everything",
+  clearCancel: "Cancel",
 
   // Status labels
   statusHealed: "Healed",

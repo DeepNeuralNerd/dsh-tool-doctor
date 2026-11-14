@@ -159,6 +159,8 @@ export interface DoctorState {
   guidance: GuidanceState;
   guidanceLoading: boolean;
   error: { source: DoctorErrorSource; detail: string } | null;
+  /** When the stats snapshot last came from the host; null after reset or before any load. */
+  lastUpdated: number | null;
 }
 
 const API_BASE = "/plugin-api/tool-doctor";
@@ -363,6 +365,8 @@ export class DoctorStore {
       guidance: { text: null, defaultText: null },
       guidanceLoading: false,
       error: null,
+      // A persisted snapshot's age is unknown — say nothing until a load lands.
+      lastUpdated: null,
     };
   }
 
@@ -447,7 +451,7 @@ export class DoctorStore {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const stats = coerceStats(await res.json());
       if (!stats) throw new Error("malformed payload");
-      this.patch({ stats, status: "ready", error: null });
+      this.patch({ stats, status: "ready", error: null, lastUpdated: Date.now() });
       persist(stats);
     } catch (err) {
       this.patch({ error: { source: "stats", detail: describeError(err) } });
@@ -496,6 +500,7 @@ export class DoctorStore {
       statusFilter: "all",
       candidates: null,
       error: null,
+      lastUpdated: null,
     });
     persist(cleared);
   };

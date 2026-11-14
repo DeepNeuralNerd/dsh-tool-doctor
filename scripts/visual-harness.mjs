@@ -57,36 +57,68 @@ body { margin: 0; padding: 24px; background: #ffffff; font-family: system-ui, -a
     <div class="dsh_td_headerActions">
       <button type="button" class="dsh_td_btnGhost">Refresh</button>
       <button type="button" class="dsh_td_btnGhost dsh_td_btnGhostActive">Auto-refresh</button>
-      <button type="button" class="dsh_td_btnDanger">Clear</button>
     </div>
   </header>
 
   <section class="dsh_td_overview">
-    <div class="dsh_td_outcomeCard">
-      <div class="dsh_td_outcomePrimary">
-        <span class="dsh_td_kpiTitle">Repairs</span>
-        <span class="dsh_td_outcomeValue dsh_td_kpiValueSuccess">37</span>
-        <span class="dsh_td_outcomeRateRow">
-          <span class="dsh_td_kpiMeter"><span class="dsh_td_kpiMeterFill" style="width:92.5%"></span></span>
-          <span class="dsh_td_kpiDesc">successful repairs — 92.5% of repair attempts succeeded.</span>
-        </span>
-      </div>
-      <div class="dsh_td_outcomeSplit">
-        <div class="dsh_td_outcomeSplitItem">
-          <span class="dsh_td_outcomeSplitValue dsh_td_kpiValueDanger">3</span>
-          <span class="dsh_td_outcomeSplitLabel">failed repairs</span>
+    <div class="dsh_td_outcomeCard" data-state="attention">
+      <div class="dsh_td_outcomeStatus">
+        <span class="dsh_td_statusDot dsh_td_statusDotAttention" aria-hidden="true"></span>
+        <div class="dsh_td_statusCopy">
+          <span class="dsh_td_statusHeadline">Needs attention</span>
+          <span class="dsh_td_statusReason">9 calls are still failing.</span>
+          <span class="dsh_td_statusMeta"><span>Updated 2 min ago</span></span>
         </div>
-        <div class="dsh_td_outcomeSplitItem">
-          <span class="dsh_td_outcomeSplitValue dsh_td_kpiValueDanger">6</span>
-          <span class="dsh_td_outcomeSplitLabel">unrecovered failures</span>
+        <button type="button" class="dsh_td_statusAction">See failing calls</button>
+      </div>
+      <div class="dsh_td_outcomeEvidence">
+        <div class="dsh_td_outcomePrimary">
+          <span class="dsh_td_outcomeValue dsh_td_kpiValueSuccess">37</span>
+          <span class="dsh_td_outcomeCaption">calls repaired</span>
+          <span class="dsh_td_outcomeRateRow">
+            <span class="dsh_td_kpiMeter"><span class="dsh_td_kpiMeterFill" style="width:92.5%"></span></span>
+            <span class="dsh_td_kpiDesc">92.5% of repair attempts succeeded.</span>
+          </span>
+        </div>
+        <div class="dsh_td_outcomeSplit">
+          <div class="dsh_td_outcomeSplitItem">
+            <span class="dsh_td_outcomeSplitValue dsh_td_kpiValueDanger">9</span>
+            <span class="dsh_td_outcomeSplitLabel">calls still failing</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="dsh_td_outcomeCard" data-state="ok">
+      <div class="dsh_td_outcomeStatus">
+        <span class="dsh_td_statusDot dsh_td_statusDotOk" aria-hidden="true"></span>
+        <div class="dsh_td_statusCopy">
+          <span class="dsh_td_statusHeadline">Working normally</span>
+          <span class="dsh_td_statusReason">Every recent failure was repaired before the host saw it.</span>
+          <span class="dsh_td_statusMeta"><span class="dsh_td_statusStale">Connection lost — showing saved data.</span></span>
+        </div>
+      </div>
+      <div class="dsh_td_outcomeEvidence">
+        <div class="dsh_td_outcomePrimary">
+          <span class="dsh_td_outcomeValue dsh_td_kpiValueSuccess">12</span>
+          <span class="dsh_td_outcomeCaption">calls repaired</span>
+          <span class="dsh_td_outcomeRateRow">
+            <span class="dsh_td_kpiMeter"><span class="dsh_td_kpiMeterFill" style="width:100%"></span></span>
+            <span class="dsh_td_kpiDesc">100% of repair attempts succeeded.</span>
+          </span>
+        </div>
+        <div class="dsh_td_outcomeSplit">
+          <div class="dsh_td_outcomeSplitItem">
+            <span class="dsh_td_outcomeSplitValue">0</span>
+            <span class="dsh_td_outcomeSplitLabel">calls still failing</span>
+          </div>
         </div>
       </div>
     </div>
     <div class="dsh_td_kpiGrid">
-      <div class="dsh_td_kpiCard dsh_td_kpiCardSmall"><span class="dsh_td_kpiTitle">Intercepted calls</span><span class="dsh_td_kpiValue">146</span></div>
+      <div class="dsh_td_kpiCard dsh_td_kpiCardSmall"><span class="dsh_td_kpiTitle">Calls checked</span><span class="dsh_td_kpiValue">146</span></div>
       <div class="dsh_td_kpiCard dsh_td_kpiCardSmall"><span class="dsh_td_kpiTitle">Promoted calls</span><span class="dsh_td_kpiValue dsh_td_kpiValueAccent">4</span></div>
       <div class="dsh_td_kpiCard dsh_td_kpiCardSmall"><span class="dsh_td_kpiTitle">Estimated tokens saved <span class="dsh_td_estimateBadge">Estimate</span></span><span class="dsh_td_kpiValue dsh_td_kpiValueSuccess">5.2k</span></div>
-      <div class="dsh_td_kpiCard dsh_td_kpiCardSmall"><span class="dsh_td_kpiTitle">Would repair (shadow)</span><span class="dsh_td_kpiValue dsh_td_kpiValueAccent">11</span></div>
+      <div class="dsh_td_kpiCard dsh_td_kpiCardSmall"><span class="dsh_td_kpiTitle">Would have repaired</span><span class="dsh_td_kpiValue dsh_td_kpiValueAccent">11</span></div>
     </div>
   </section>
 
@@ -99,8 +131,8 @@ body { margin: 0; padding: 24px; background: #ffffff; font-family: system-ui, -a
 
   <section class="dsh_td_livePane">
     <div class="dsh_td_shadowBanner">
-      <span class="dsh_td_shadowBannerLead">Shadow mode is on: matches count as would-repair and the original arguments go out.</span>
-      <span class="dsh_td_shadowBannerCount">11 Would repair (shadow)</span>
+      <span class="dsh_td_shadowBannerLead">Shadow mode: repairs are counted, but the original arguments are still sent — nothing changes yet.</span>
+      <span class="dsh_td_shadowBannerCount">11 Would have repaired</span>
     </div>
     <div class="dsh_td_toolbar">
       <span class="dsh_td_searchWrap"><input class="dsh_td_searchInput" placeholder="Search tool, category, or args…" /></span>
@@ -211,8 +243,9 @@ body { margin: 0; padding: 24px; background: #ffffff; font-family: system-ui, -a
         <div class="dsh_td_trendLegend">
           <span><span class="dsh_td_trendDot dsh_td_trendDotOk"></span>repaired</span>
           <span><span class="dsh_td_trendDot dsh_td_trendDotErr"></span>failed</span>
-          <span class="dsh_td_trendSpan">13:41:02 – 14:03:19</span>
+          <span class="dsh_td_trendSpan">13:41:02 – 14:03:19 · 38 events</span>
         </div>
+        <p class="dsh_td_trendSummary">Failures increased in the recent half of this window.</p>
       </div>
     </div>
     <div class="dsh_td_healthCard">
@@ -238,10 +271,10 @@ body { margin: 0; padding: 24px; background: #ffffff; font-family: system-ui, -a
     </div>
   </section>
 
-  <p class="harnessNote">Rules — breaker bar first, groups by purpose</p>
+  <p class="harnessNote">Rules — paused state at its switch, disclosure detail, danger zone last</p>
   <section class="dsh_td_rulesPane">
     <div class="dsh_td_breakerBar">
-      <span class="dsh_td_breakerBarTitle">Paused by the circuit breaker:</span>
+      <span class="dsh_td_breakerBarTitle">Repairs temporarily paused:</span>
       <span class="dsh_td_openPill">Fuzzy edit match</span>
       <span class="dsh_td_openPill">Range clamp</span>
     </div>
@@ -250,17 +283,33 @@ body { margin: 0; padding: 24px; background: #ffffff; font-family: system-ui, -a
       <div class="dsh_td_rulesGrid">
         <article class="dsh_td_ruleCard">
           <div class="dsh_td_ruleHead">
-            <h3 class="dsh_td_ruleTitle">Schema-typed arguments</h3>
+            <div class="dsh_td_ruleNameGroup">
+              <h3 class="dsh_td_ruleTitle">Schema-typed arguments</h3>
+            </div>
             <button type="button" role="switch" aria-checked="true" class="dsh_td_ruleToggle dsh_td_ruleToggleOn"><span class="dsh_td_ruleToggleTrack"><span class="dsh_td_ruleToggleKnob"></span></span>Active</button>
           </div>
           <p class="dsh_td_kpiDesc">Coerces argument values to the type the tool schema declares.</p>
+          <details class="dsh_td_ruleDetails">
+            <summary>Recent activity</summary>
+            <p class="dsh_td_ruleDetailLine">9 events</p>
+            <p class="dsh_td_ruleIdLine">autoSchemaArgs · ARGS_SCHEMA</p>
+          </details>
         </article>
         <article class="dsh_td_ruleCard">
           <div class="dsh_td_ruleHead">
-            <h3 class="dsh_td_ruleTitle">Fuzzy edit match</h3>
+            <div class="dsh_td_ruleNameGroup">
+              <h3 class="dsh_td_ruleTitle">Fuzzy edit match</h3>
+              <span class="dsh_td_pausedChip" title="This category failed its recoveries too often inside the window; retries stay paused until the circuit closes.">Repairs paused</span>
+            </div>
             <button type="button" role="switch" aria-checked="false" class="dsh_td_ruleToggle"><span class="dsh_td_ruleToggleTrack"><span class="dsh_td_ruleToggleKnob"></span></span>Inactive</button>
           </div>
           <p class="dsh_td_kpiDesc">Retries a failed edit with whitespace-normalized matching.</p>
+          <details class="dsh_td_ruleDetails">
+            <summary>Recent activity</summary>
+            <p class="dsh_td_rulePausedNote">Retries are paused after repeated failures. The rule resumes automatically once calls succeed again.</p>
+            <p class="dsh_td_ruleDetailLine">14 events <span class="dsh_td_catFailed">· 5 failed</span></p>
+            <p class="dsh_td_ruleIdLine">autoFuzzyEdit · FS_WHITESPACE</p>
+          </details>
         </article>
       </div>
     </div>
@@ -269,7 +318,9 @@ body { margin: 0; padding: 24px; background: #ffffff; font-family: system-ui, -a
       <div class="dsh_td_rulesGrid">
         <article class="dsh_td_ruleCard">
           <div class="dsh_td_ruleHead">
-            <h3 class="dsh_td_ruleTitle">Error hints</h3>
+            <div class="dsh_td_ruleNameGroup">
+              <h3 class="dsh_td_ruleTitle">Error hints</h3>
+            </div>
             <button type="button" role="switch" aria-checked="true" class="dsh_td_ruleToggle dsh_td_ruleToggleOn"><span class="dsh_td_ruleToggleTrack"><span class="dsh_td_ruleToggleKnob"></span></span>Active</button>
           </div>
           <p class="dsh_td_kpiDesc">Appends a short recovery hint to tool errors the doctor could not fix.</p>
@@ -281,40 +332,72 @@ body { margin: 0; padding: 24px; background: #ffffff; font-family: system-ui, -a
       <div class="dsh_td_rulesGrid">
         <article class="dsh_td_ruleCard">
           <div class="dsh_td_ruleHead">
-            <h3 class="dsh_td_ruleTitle">Shadow mode</h3>
+            <div class="dsh_td_ruleNameGroup">
+              <h3 class="dsh_td_ruleTitle">Shadow mode</h3>
+            </div>
             <button type="button" role="switch" aria-checked="true" class="dsh_td_ruleToggle dsh_td_ruleToggleOn"><span class="dsh_td_ruleToggleTrack"><span class="dsh_td_ruleToggleKnob"></span></span>Active</button>
           </div>
           <p class="dsh_td_kpiDesc">Evaluates repairs and dispatches the original arguments — measures coverage.</p>
         </article>
       </div>
     </div>
-    <div class="dsh_td_rankCard">
-      <div class="dsh_td_cardTitle">Rule health</div>
-      <ul>
-        <li class="dsh_td_catRow"><span class="dsh_td_catName">Fuzzy edit match</span><span class="dsh_td_openPill">Paused</span><span class="dsh_td_catCounts">14 total <span class="dsh_td_catFailed">· 5 failed</span></span></li>
-        <li class="dsh_td_catRow dsh_td_catRowMuted"><span class="dsh_td_catName">Path quotes</span><span class="dsh_td_catCounts">0 total</span></li>
-      </ul>
+    <details class="dsh_td_healthDetails">
+      <summary class="dsh_td_healthSummary">Rule health by category</summary>
+      <div class="dsh_td_rankCard">
+        <ul>
+          <li class="dsh_td_catRow"><span class="dsh_td_catName">Fuzzy edit match</span><span class="dsh_td_openPill">Paused</span><span class="dsh_td_catCounts">14 total <span class="dsh_td_catFailed">· 5 failed</span></span></li>
+          <li class="dsh_td_catRow dsh_td_catRowMuted"><span class="dsh_td_catName">Path quotes</span><span class="dsh_td_catCounts">0 total</span></li>
+        </ul>
+      </div>
+    </details>
+    <div class="dsh_td_dangerZone">
+      <div class="dsh_td_dangerCopy">
+        <span class="dsh_td_dangerTitle">Clear records</span>
+        <p class="dsh_td_kpiDesc">Deletes every recorded event and all recurring-error counts. This cannot be undone.</p>
+      </div>
+      <button type="button" class="dsh_td_btnGhost">Clear records</button>
+    </div>
+    <div class="dsh_td_dangerZone">
+      <div class="dsh_td_dangerCopy">
+        <span class="dsh_td_dangerTitle">Clear records</span>
+      </div>
+      <div class="dsh_td_dangerConfirm" role="group" aria-label="Clear records">
+        <p class="dsh_td_dangerConfirmText">This deletes 146 recorded events and all recurring-error counts. It cannot be undone.</p>
+        <div class="dsh_td_dangerButtons">
+          <button type="button" class="dsh_td_btnGhost">Cancel</button>
+          <button type="button" class="dsh_td_btnDanger">Clear everything</button>
+        </div>
+      </div>
     </div>
   </section>
 
-  <p class="harnessNote">Empty state</p>
+  <p class="harnessNote">Empty state — waiting status, no age line</p>
   <div class="dsh_td_container">
-    <div class="dsh_td_outcomeCard">
-      <div class="dsh_td_outcomePrimary">
-        <span class="dsh_td_kpiTitle">Repairs</span>
-        <span class="dsh_td_outcomeValue">0</span>
-        <span class="dsh_td_outcomeRateRow">
-          <span class="dsh_td_kpiMeter"><span class="dsh_td_kpiMeterFill" style="width:0%"></span></span>
-          <span class="dsh_td_kpiDesc">successful repairs — 0% of repair attempts succeeded.</span>
-        </span>
+    <div class="dsh_td_outcomeCard" data-state="waiting">
+      <div class="dsh_td_outcomeStatus">
+        <span class="dsh_td_statusDot dsh_td_statusDotWaiting" aria-hidden="true"></span>
+        <div class="dsh_td_statusCopy">
+          <span class="dsh_td_statusHeadline">Waiting for tool calls</span>
+          <span class="dsh_td_statusReason">The doctor starts reporting as soon as the agent calls tools.</span>
+          <span class="dsh_td_statusMeta"></span>
+        </div>
       </div>
-      <div class="dsh_td_outcomeSplit">
-        <div class="dsh_td_outcomeSplitItem"><span class="dsh_td_outcomeSplitValue">0</span><span class="dsh_td_outcomeSplitLabel">failed repairs</span></div>
-        <div class="dsh_td_outcomeSplitItem"><span class="dsh_td_outcomeSplitValue">0</span><span class="dsh_td_outcomeSplitLabel">unrecovered failures</span></div>
+      <div class="dsh_td_outcomeEvidence">
+        <div class="dsh_td_outcomePrimary">
+          <span class="dsh_td_outcomeValue">0</span>
+          <span class="dsh_td_outcomeCaption">calls repaired</span>
+          <span class="dsh_td_outcomeRateRow">
+            <span class="dsh_td_kpiMeter"><span class="dsh_td_kpiMeterFill" style="width:0%"></span></span>
+            <span class="dsh_td_kpiDesc">0% of repair attempts succeeded.</span>
+          </span>
+        </div>
+        <div class="dsh_td_outcomeSplit">
+          <div class="dsh_td_outcomeSplitItem"><span class="dsh_td_outcomeSplitValue">0</span><span class="dsh_td_outcomeSplitLabel">calls still failing</span></div>
+        </div>
       </div>
     </div>
     <div class="dsh_td_kpiGrid">
-      <div class="dsh_td_kpiCard dsh_td_kpiCardSmall"><span class="dsh_td_kpiTitle">Intercepted calls</span><span class="dsh_td_kpiValue">0</span></div>
+      <div class="dsh_td_kpiCard dsh_td_kpiCardSmall"><span class="dsh_td_kpiTitle">Calls checked</span><span class="dsh_td_kpiValue">0</span></div>
       <div class="dsh_td_kpiCard dsh_td_kpiCardSmall"><span class="dsh_td_kpiTitle">Promoted calls</span><span class="dsh_td_kpiValue">0</span></div>
     </div>
     <div class="dsh_td_emptyState">

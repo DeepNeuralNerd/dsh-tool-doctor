@@ -2,6 +2,33 @@
 
 ## Unreleased (2026-11-14)
 
+- **Design pass: answer "Is Tool Doctor working, and do I need to do
+  anything?" first (design recommendations 1–7).** (1) The outcome card now
+  LEADS with a plain-language status — Working normally / Needs attention /
+  Repairs temporarily paused / Waiting for tool calls — derived in honest
+  severity order (paused breakers > still-failing calls > clean log > empty),
+  with one short reason and one relevant action; the repaired count and rate
+  stay as evidence beneath. (2) Stale data is unmistakable: the store tracks
+  `lastUpdated`, the card shows "Updated N min ago" (bucketed, 30 s
+  heartbeat), and a failed refresh over retained data says "Connection lost —
+  showing saved data." (3) "Clear records" left the header for a quiet danger
+  zone at the bottom of the rules, confirming by naming exactly how many
+  events and counts go away (irreversible). (4) Main view speaks user
+  language: "calls repaired", "calls still failing" (one honest split =
+  Errors-tab number), "Calls checked", "Would have repaired"; shadow/breaker/
+  candidate/rule ids moved into expanded details. (5) The trend now names its
+  span and event count and adds a directional sentence only when ≥4 failures
+  support it ("Failures increased in the recent half…", else an honest
+  "too few to judge"). (6) Smallest explanatory text raised to 12 px and
+  dim/muted tokens strengthened in both themes; state still pairs color with
+  words and symbols. (7) Rules read as settings: paused rules carry a chip at
+  their OWN switch plus a "Recent activity" disclosure (events, failures,
+  last fired, flag + category ids), and the full per-category health table
+  sits behind a disclosure. New pure-function and rendered-component tests
+  pin the status derivation, age bucketing, trend direction, per-rule paused
+  chip, and clear-records placement; harness re-verified programmatically at
+  1280/460 px light/dark with no overflow.
+
 - **Round-6 corrections: trend counts by outcome, lone events, candidate
   id.** (1) The Analytics trend no longer hides real failures during shadow
   mode: bars are filled BY OUTCOME, so a shadow failure (the original call
