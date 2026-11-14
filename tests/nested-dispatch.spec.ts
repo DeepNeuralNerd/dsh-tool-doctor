@@ -6,10 +6,14 @@ function makeTools(executed: Array<{ name: string; arguments: unknown }>) {
   return {
     get: (name: string) => ({ name }), // every tool visible in scope
     // The host accepts batches; a recovery arrives as one call with JSON args.
-    execute: async (input: { calls: Array<{ name: string; arguments: string }> }) => {
+    execute: async (input: {
+      calls: Array<{ id: string; name: string; arguments: string }>;
+    }) => {
       const block = input.calls[0];
       executed.push({ name: block.name, arguments: JSON.parse(block.arguments) });
-      return { results: [{ content: [{ type: "text", text: `ok:${block.name}` }] }] };
+      return {
+        results: [{ callId: block.id, result: { content: [{ type: "text", text: `ok:${block.name}` }] } }],
+      };
     },
   } as never;
 }
@@ -87,6 +91,34 @@ describe("executeNestedTool", () => {
     expect(JSON.stringify(result.content)).toContain("settled no result");
   });
 
+  it("adopts the paired result, not the {callId, result} wrapper", async () => {
+    // Live regression: adopting the wrapper itself produced a value-less
+    // "success" the host rejected with "value is not lossless JSON".
+    const tools = {
+      get: (n: string) => ({ name: n }),
+      execute: async () => ({
+        results: [
+          {
+            callId: "doctor",
+            result: {
+              content: [{ type: "text", text: "body" }],
+              value: { lineCount: 3 },
+              isError: false,
+            },
+          },
+        ],
+      }),
+    } as never;
+    const parent = {
+      callId: "call_1",
+      signal: new AbortController().signal,
+    } as never;
+    const result = await executeNestedTool(parent, tools, "read", {}, "x");
+    expect(result.isError).toBeFalsy();
+    expect(result.value).toEqual({ lineCount: 3 });
+    expect("callId" in result).toBe(false);
+  });
+
   it("sends the documented single-call batch shape", async () => {
     let seen:
       | { calls: Array<Record<string, unknown>>; signal: unknown; toolSet?: unknown }
@@ -95,7 +127,9 @@ describe("executeNestedTool", () => {
       get: (n: string) => ({ name: n }),
       execute: async (input: typeof seen) => {
         seen = input;
-        return { results: [{ content: [{ type: "text", text: "ok" }] }] };
+        return {
+          results: [{ callId: "x", result: { content: [{ type: "text", text: "ok" }] } }],
+        };
       },
     } as never;
     const parent = {
@@ -120,7 +154,7 @@ describe("executeNestedTool", () => {
     const tools = {
       get: (n: string) => ({ name: n }),
       execute: async () => ({
-        results: [{ content: [{ type: "text", text: "asked" }] }],
+        results: [{ callId: "x", result: { content: [{ type: "text", text: "asked" }] } }],
         additionalContexts: [{ role: "user", content: "deferred context" }],
         concluded: true,
       }),
@@ -139,7 +173,9 @@ describe("executeNestedTool", () => {
     const tools = {
       get: (n: string) => ({ name: n }),
       execute: async () => ({
-        results: [{ isError: true, content: [{ type: "text", text: "no" }] }],
+        results: [
+          { callId: "x", result: { isError: true, content: [{ type: "text", text: "no" }] } },
+        ],
         concluded: true,
       }),
     } as never;

@@ -2,6 +2,17 @@
 
 ## Unreleased (2026-11-14)
 
+- **Batch results are `{callId, result}` pairs — adoption unwraps
+  `entry.result` now.** The first live probe after the batch fix healed
+  both clamps yet the host rejected the final result: `tool "read"
+  returned invalid output: value is not lossless JSON` — the installed
+  `BatchSettlement` pushes `{callId, result}` per call, so adopting
+  `results[0]` had adopted the wrapper, a "success" whose `value` was
+  `undefined`, refused by the host's `snapshotToolValue`. Fakes updated
+  to the host's real shape (again: fakes mirror assumptions, hosts
+  mirror bytes) plus a regression asserting an adopted success keeps
+  its `value` and sheds the `callId`. Suite: 435 green.
+
 - **Nested recovery now dispatches through the host's batch API (it was
   failing silently before).** Live records showed every range/edit/name retry
   ending in "retry still failed (Tool batch execution failed) — original

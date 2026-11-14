@@ -60,11 +60,12 @@ function batchTools(
 ): never {
   return {
     get: (name: string) => ({ name }),
-    execute: async (input: { calls: Array<{ name: string; arguments: string }> }) => {
+    execute: async (input: { calls: Array<{ id: string; name: string; arguments: string }> }) => {
       const block = input.calls[0];
       const args = JSON.parse(block.arguments) as Record<string, unknown>;
       capture?.push({ name: block.name, arguments: args });
-      return { results: [reply(block.name, args)] };
+      // Host BatchSettlement: each settled entry is a {callId, result} pair.
+      return { results: [{ callId: block.id, result: reply(block.name, args) }] };
     },
   } as never;
 }
@@ -456,7 +457,7 @@ describe("runPipeline — routing & kind rules (2 / 10) and the truncation hint"
       execute: async (input: { calls: Array<{ name: string; arguments: string }> }) => {
         const block = input.calls[0];
         nested.push({ name: block.name, arguments: JSON.parse(block.arguments) });
-        return { results: [textResult(`ran:${block.name}`)] };
+        return { results: [{ callId: "doctor", result: textResult(`ran:${block.name}`) }] };
       },
     } as never;
 
@@ -486,7 +487,7 @@ describe("runPipeline — routing & kind rules (2 / 10) and the truncation hint"
       schemas: () => [{ name: "mcp__a__bash" }, { name: "mcp__b__bash" }],
       execute: async (input: { calls: Array<{ name: string }> }) => {
         nested.push({ name: input.calls[0].name });
-        return { results: [textResult("unreachable")] };
+        return { results: [{ callId: "doctor", result: textResult("unreachable") }] };
       },
     } as never;
 
@@ -514,8 +515,11 @@ describe("runPipeline — routing & kind rules (2 / 10) and the truncation hint"
       execute: async () => ({
         results: [
           {
-            isError: true,
-            error: new Error("command failed: ls: /nope: No such file or directory"),
+            callId: "doctor",
+            result: {
+              isError: true,
+              error: new Error("command failed: ls: /nope: No such file or directory"),
+            },
           },
         ],
       }),
@@ -549,10 +553,13 @@ describe("runPipeline — routing & kind rules (2 / 10) and the truncation hint"
       execute: async () => ({
         results: [
           {
-            isError: true,
-            error: Object.assign(new Error("Unknown tool: mcp__shell__bash"), {
-              code: "UNKNOWN_TOOL",
-            }),
+            callId: "doctor",
+            result: {
+              isError: true,
+              error: Object.assign(new Error("Unknown tool: mcp__shell__bash"), {
+                code: "UNKNOWN_TOOL",
+              }),
+            },
           },
         ],
       }),
@@ -592,7 +599,9 @@ describe("runPipeline — routing & kind rules (2 / 10) and the truncation hint"
       execute: async (input: { calls: Array<{ name: string; arguments: string }> }) => {
         const block = input.calls[0];
         nested.push({ name: block.name, arguments: JSON.parse(block.arguments) });
-        return { results: [textResult("file1.txt\nfile2.txt")] };
+        return {
+          results: [{ callId: "doctor", result: textResult("file1.txt\nfile2.txt") }],
+        };
       },
     } as never;
 
@@ -619,7 +628,7 @@ describe("runPipeline — routing & kind rules (2 / 10) and the truncation hint"
     const tools = {
       get: () => undefined,
       schemas: () => [{ name: "read" }, { name: "write" }],
-      execute: async () => ({ results: [textResult("unreachable")] }),
+      execute: async () => ({ results: [{ callId: "doctor", result: textResult("unreachable") }] }),
     } as never;
 
     const outcome = await runPipeline(

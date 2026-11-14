@@ -70,11 +70,11 @@ function captureTools(
     get: (name: string) => ({ name }),
     // Host contract: nested recoveries arrive as a single-call batch whose
     // settled result is handed back through `results`.
-    execute: async (input: { calls: Array<{ name: string; arguments: string }> }) => {
+    execute: async (input: { calls: Array<{ id: string; name: string; arguments: string }> }) => {
       const block = input.calls[0];
       const args = JSON.parse(block.arguments) as Record<string, unknown>;
       calls.push({ name: block.name, args });
-      return { results: [reply(block.name, args)] };
+      return { results: [{ callId: block.id, result: reply(block.name, args) }] };
     },
   } as unknown as ToolRuntime;
   return { tools, calls };

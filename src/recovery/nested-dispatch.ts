@@ -90,7 +90,10 @@ export async function executeNestedTool(
 
   try {
     const batch = await tools.execute(input);
-    const settled = batch?.results?.[0];
+    // Settled entries are {callId, result} PAIRS (host BatchSettlement).
+    // Adopting the wrapper itself produced a value-less "success" the host
+    // then rejected: "value is not lossless JSON".
+    const settled = batch?.results?.[0]?.result;
     if (settled === undefined) {
       return recoveryFailure(
         `Nested recovery of '${parent.name}' through '${name}' settled no result.`,

@@ -96,9 +96,15 @@ export interface ToolBatchInput {
   toolSet?: unknown;
 }
 
-/** What the host batch runner settles; one result per submitted call, in order. */
+/** One settled batch entry: the host pairs each call id with its result (verified from the installed settlement code). */
+export interface ToolCallResult {
+  callId: string;
+  result: ToolExecutionResult;
+}
+
+/** What the host batch runner settles; one wrapped entry per submitted call, in order. */
 export interface ToolBatchResult {
-  results: ToolExecutionResult[];
+  results: ToolCallResult[];
   additionalContexts?: unknown[];
   concluded?: boolean;
 }
