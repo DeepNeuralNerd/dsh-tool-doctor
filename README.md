@@ -1,6 +1,8 @@
 # Tool doctor
 
-Tool doctor is a DeepSeek Harness (DSH) plugin that repairs selected tool-call mistakes. It checks arguments before dispatch and, for recognized errors, can retry through the host's tool runtime. The dashboard shows what changed, which calls succeeded, and which failures still need attention.
+Mechanical tool-call failures are pure waste. A `read` offset past the end of a file, a `limit` above the schema maximum, an `edit` anchor one space off — the host correctly refuses, and the model then pays a full round-trip to notice the error, guess the fix, and resend. Across a long session those small taxes become visible latency, burned tokens, and stalled work, while the model does the job of a typo-corrector instead of the job you gave it.
+
+Tool doctor removes that tax. It repairs mechanical argument mistakes before a call runs, and retries the recoverable failures after they happen — returning the result the call was meant to produce, or the original error completely untouched when nothing was safely fixable. Everything genuine stays exactly the host's behavior; only the trivia stops reaching the model.
 
 ## What it does
 

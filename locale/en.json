@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Tool doctor",
-    "description": "Repairs recognized tool-call mistakes before dispatch or by retrying selected failures through the DSH host. Open Tool doctor in Plugin Manager to review outcomes, recurring errors, and rule settings. Repairs are limited to supported patterns; the dashboard shows failures that remain. Diagnostic records stay in the DSH home directory. Guidance edits apply immediately and return to the factory default after a plugin restart.",
+    "description": "Mechanical tool-call failures cost the model a full round-trip: a range past end of file, a stringified number, a whitespace-drifted edit anchor — the host refuses, the model rewrites and retries. Tool doctor removes that tax: arguments are repaired before dispatch, and recognized failures are retried through the host's own runtime at the bound the host states, adopting only genuine successes; anything else keeps the original error exactly as the model would have seen it. Open Tool doctor in Plugin Manager to review outcomes, recurring errors, and rule settings. Supported patterns only; remaining failures stay visible. Records stay in the DSH home directory; guidance edits return to the factory default after a plugin restart.",
     "detail": "docs/DETAIL.md"
   }
 }
