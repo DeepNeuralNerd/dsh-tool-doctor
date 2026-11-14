@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Tool doctor",
-    "description": "Mechanical tool-call failures cost the model a full round-trip: a range past end of file, a stringified number, a whitespace-drifted edit anchor — the host refuses, the model rewrites and retries. Tool doctor removes that tax: arguments are repaired before dispatch, and recognized failures are retried through the host's own runtime at the bound the host states, adopting only genuine successes; anything else keeps the original error exactly as the model would have seen it. Open Tool doctor in Plugin Manager to review outcomes, recurring errors, and rule settings. Supported patterns only; remaining failures stay visible. Records stay in the DSH home directory; guidance edits return to the factory default after a plugin restart.",
+    "description": "Your AI assistant wastes turns fixing small mistakes in its own file requests — a line number past the end of a file, a number written as text, a search phrase that no longer matches. Tool doctor corrects these automatically, so tasks finish on the first try instead of the third. Nothing to set up and nothing to learn: install it, switch it on, and forget it is there. It never changes your files or your words — only the assistant's mistaken requests — and every correction is shown in a simple dashboard in Plugin Manager. Genuine failures still appear exactly as they are, and nothing leaves your computer. Turn it off at any time and DSH behaves exactly as if it had never been installed.",
     "detail": "docs/DETAIL.md"
   }
 }

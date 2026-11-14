@@ -1,6 +1,8 @@
 # Tool doctor
 
-Mechanical tool-call failures are pure waste. A `read` offset past the end of a file, a `limit` above the schema maximum, an `edit` anchor one space off — the host correctly refuses, and the model then pays a full round-trip to notice the error, guess the fix, and resend. Across a long session those small taxes become visible latency, burned tokens, and stalled work, while the model does the job of a typo-corrector instead of the job you gave it.
+**In plain words:** your AI assistant keeps tripping over small, silly mistakes in its own requests — "that line isn't in the file," "that number has to be a number," "I can't find that exact text" — and each trip means the same request, over again. That is time you wait and tokens you pay. Tool doctor catches and fixes those mistakes automatically. It never touches your files and never rewrites your words, it shows every fix it makes in a dashboard you can ignore, it sends nothing over the internet, and a single switch turns it off with no trace.
+
+**For the engineer:** mechanical tool-call failures are pure waste. A `read` offset past the end of a file, a `limit` above the schema maximum, an `edit` anchor one space off — the host correctly refuses, and the model then pays a full round-trip to notice the error, guess the fix, and resend. Across a long session those small taxes become visible latency, burned tokens, and stalled work, while the model does the job of a typo-corrector instead of the job you gave it.
 
 Tool doctor removes that tax. It repairs mechanical argument mistakes before a call runs, and retries the recoverable failures after they happen — returning the result the call was meant to produce, or the original error completely untouched when nothing was safely fixable. Everything genuine stays exactly the host's behavior; only the trivia stops reaching the model.
 
