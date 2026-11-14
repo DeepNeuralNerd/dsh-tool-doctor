@@ -233,6 +233,11 @@ describe("range-retry — through the pipeline (live shape end-to-end)", () => {
     expect(outcome.category).toBe("RANGE_CLAMP");
     expect(nested.calls.length).toBe(1);
     expect(nested.calls[0].args.limit).toBe(2000);
+    // The live exec carries the healed args after adoption: the host projects
+    // the returned result through the tool's render against exec.arguments,
+    // and an adopted read rendered under the original `limit: 999999` was
+    // rejected there ("output.render failed: invalid arguments").
+    expect((exec.arguments as Record<string, unknown>).limit).toBe(2000);
     const text = (outcome.result.content?.[0] as { text?: string })?.text ?? "";
     expect(text).toContain("2000 lines of content");
   });
@@ -250,6 +255,9 @@ describe("range-retry — through the pipeline (live shape end-to-end)", () => {
     const text = (outcome.result.content?.[0] as { text?: string })?.text ?? "";
     expect(text).toContain("limit must be less than or equal to 2000");
     expect(text).not.toContain("second-layer");
+    // Do-no-harm covers the execution too: a kept original error leaves the
+    // model's arguments exactly as sent.
+    expect((exec.arguments as Record<string, unknown>).limit).toBe(999999);
     // The repair was attempted and failed — counted honestly as healedFailed.
     expect(outcome.wasHealed).toBe(true);
     expect(outcome.category).toBe("RANGE_CLAMP");

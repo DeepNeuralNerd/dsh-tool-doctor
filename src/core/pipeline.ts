@@ -280,7 +280,19 @@ export async function runPipeline(
           ? compactPreview(JSON.stringify(recovered.args))
           : normalizedPreview);
       changes.push(recovered.changeLabel);
-      if (recovered.result !== undefined) result = recovered.result;
+      if (recovered.result !== undefined) {
+        result = recovered.result;
+        // An adopted success must present coherently: the host projects the
+        // returned result through the tool's render against the LIVE
+        // exec.arguments — an adopted read at `limit: 2000` rendered under
+        // the original `limit: 999999` was rejected there ("output.render
+        // failed: invalid arguments"). Write back exactly what the adopted
+        // run used. Do-no-harm keeps the original error, so the arguments of
+        // a kept-failure stay exactly as the model sent them.
+        if (recovered.args !== undefined && recovered.result.isError !== true) {
+          exec.arguments = recovered.args;
+        }
+      }
       if (stage.terminal) {
         settledEarly = true;
         break;

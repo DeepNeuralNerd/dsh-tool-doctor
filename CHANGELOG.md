@@ -2,6 +2,19 @@
 
 ## Unreleased (2026-11-14)
 
+- **Adopted recoveries now present with the arguments that produced them.**
+  Live proof round: the offset recovery healed end-to-end (model received
+  the clamped tail; first real `healedOK`), while the limit recovery was
+  rejected AFTER healing — `output.render failed: invalid arguments: limit
+  must be less than or equal to 2000`: the host projects the returned
+  result through the tool's render against the LIVE `exec.arguments`, and
+  a post-stage's args repair had only ever fed the record preview, never
+  the execution. The pipeline writes an adopted success's recovery args
+  back to `exec.arguments` (range-retry, anchor-whitespace, kind-fix —
+  each adopted a run made with exactly those args); the do-no-harm path
+  keeps the original error and leaves the execution byte-identical.
+  Suite: 435 green.
+
 - **Batch results are `{callId, result}` pairs — adoption unwraps
   `entry.result` now.** The first live probe after the batch fix healed
   both clamps yet the host rejected the final result: `tool "read"
