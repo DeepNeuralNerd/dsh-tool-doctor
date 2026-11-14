@@ -2,6 +2,17 @@
 
 ## Unreleased (2026-11-14)
 
+- **Publication documentation and plugin identity.** Pre-push round: full
+  README (capabilities, mechanics, rule table, dashboard API, privacy), MIT
+  LICENSE, `locale/en.json` panel metadata (`meta.title`/`meta.description`/
+  `meta.detail`), single-image detail document `docs/DETAIL.md`, `icon.svg`
+  (gear-ring + pulse, hollow center, theme-safe) and `docs/preview.svg`
+  (fail→heal story, text-free), both drawn to the artwork spec by the
+  reviewer model. Manifest wires `./locale/*.json`, `./icon`, top-level
+  `icon`, and ships README/LICENSE/docs/locale/icon in `files`; package and
+  patch descriptions rewritten to match verified behavior (route methods,
+  guidance reset-on-restart, local storage, estimated token savings — all
+  re-checked against source).
 - **Adopted recoveries now present with the arguments that produced them.**
   Live proof round: the offset recovery healed end-to-end (model received
   the clamped tail; first real `healedOK`), while the limit recovery was

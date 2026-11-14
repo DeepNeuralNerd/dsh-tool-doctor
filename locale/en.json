@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Tool doctor",
+    "description": "Repairs recognized tool-call mistakes before dispatch or by retrying selected failures through the DSH host. Open Tool doctor in Plugin Manager to review outcomes, recurring errors, and rule settings. Repairs are limited to supported patterns; the dashboard shows failures that remain. Diagnostic records stay in the DSH home directory. Guidance edits apply immediately and return to the factory default after a plugin restart.",
+    "detail": "docs/DETAIL.md"
+  }
+}

@@ -1,5 +1,4 @@
-# Diagnoses and repairs failing tool calls: pre-dispatch argument repair,
-# post-dispatch recovery retries, response-side tool-call promotion.
+# Repairs recognized tool-call mistakes and records the outcome in Tool doctor.
 - insert:
     - id: tool-doctor
       name: dsh-tool-doctor
