@@ -63,7 +63,7 @@ export const kindFixStage: PostStage = {
     if (names === undefined) return undefined;
     const listingTool = chooseListingTool(names);
     if (listingTool === undefined || listingTool === exec.name) return undefined;
-    const listingArgs = listingArgsFor(env.tools.get(listingTool, exec.agent), dir);
+    const listingArgs = listingArgsFor(env.tools.get(listingTool, exec.agent, exec.toolSet), dir);
     if (listingArgs === undefined) return undefined;
     return { listingTool, listingArgs, dir } satisfies KindPayload;
   },

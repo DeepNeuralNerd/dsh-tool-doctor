@@ -14,16 +14,18 @@
 import type { ToolDispatchExecution, ToolRuntime } from "../types.ts";
 
 /**
- * Names of the tools callable in the execution's agent scope, or undefined
- * when the plane cannot be enumerated. Never throws.
+ * Names of the tools callable in the execution's agent scope (with the step's
+ * admitted set — without it the host hides conditional registrations, MCP
+ * tools among them), or undefined when the plane cannot be enumerated.
+ * Never throws.
  */
 export function visibleToolNames(
   tools: ToolRuntime | undefined,
-  exec: Pick<ToolDispatchExecution, "agent">,
+  exec: Pick<ToolDispatchExecution, "agent" | "toolSet">,
 ): readonly string[] | undefined {
   if (tools === undefined || typeof tools.schemas !== "function") return undefined;
   try {
-    const schemas = tools.schemas(exec.agent);
+    const schemas = tools.schemas(exec.agent, exec.toolSet);
     if (!Array.isArray(schemas)) return undefined;
     const names: string[] = [];
     for (const schema of schemas) {

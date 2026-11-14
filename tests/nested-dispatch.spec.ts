@@ -88,7 +88,9 @@ describe("executeNestedTool", () => {
   });
 
   it("sends the documented single-call batch shape", async () => {
-    let seen: { calls: Array<Record<string, unknown>>; signal: unknown } | undefined;
+    let seen:
+      | { calls: Array<Record<string, unknown>>; signal: unknown; toolSet?: unknown }
+      | undefined;
     const tools = {
       get: (n: string) => ({ name: n }),
       execute: async (input: typeof seen) => {
@@ -100,6 +102,7 @@ describe("executeNestedTool", () => {
       name: "read",
       callId: "call_1",
       signal: new AbortController().signal,
+      toolSet: { admitted: "step-set" },
     } as never;
 
     await executeNestedTool(parent, tools, "read", { file_path: "/a.txt" }, "range-retry");
@@ -109,6 +112,45 @@ describe("executeNestedTool", () => {
     expect(block?.id).toContain(":doctor:range-retry");
     expect(JSON.parse(String(block?.arguments))).toEqual({ file_path: "/a.txt" });
     expect(seen?.signal).toBeInstanceOf(Object); // cancellation carried over
+    // Conditional (MCP) registrations resolve only with the admitted set.
+    expect(seen?.toolSet).toEqual({ admitted: "step-set" });
+  });
+
+  it("adopts the child's batch-level contexts and turn-conclusion", async () => {
+    const tools = {
+      get: (n: string) => ({ name: n }),
+      execute: async () => ({
+        results: [{ content: [{ type: "text", text: "asked" }] }],
+        additionalContexts: [{ role: "user", content: "deferred context" }],
+        concluded: true,
+      }),
+    } as never;
+    const parent = {
+      callId: "call_1",
+      signal: new AbortController().signal,
+    } as never;
+
+    const result = await executeNestedTool(parent, tools, "ask_user_question", {}, "bridge-x");
+    expect(result.additionalContexts).toHaveLength(1);
+    expect(result.concludesTurn).toBe(true);
+  });
+
+  it("never concludes the turn with an adopted failure", async () => {
+    const tools = {
+      get: (n: string) => ({ name: n }),
+      execute: async () => ({
+        results: [{ isError: true, content: [{ type: "text", text: "no" }] }],
+        concluded: true,
+      }),
+    } as never;
+    const parent = {
+      callId: "call_1",
+      signal: new AbortController().signal,
+    } as never;
+
+    const result = await executeNestedTool(parent, tools, "read", {}, "x");
+    expect(result.concludesTurn).toBeUndefined();
+    expect(result.isError).toBe(true);
   });
 
   it("wraps a thrown host error into a recovery failure instead of throwing", async () => {

@@ -23,6 +23,22 @@
   change that lets nested heals actually land — before it, every one fell back
   to do-no-harm. Suite: 432 green.
 
+- **Adoption now carries the child's whole outcome, and recovery dispatches
+  carry the step's admission.** Audited every stage claim against the host
+  contract after the batch fix. (1) The host delivers a batch's deferred
+  contexts and turn-conclusion beside `results`, not inside a settled result —
+  the unwrap dropped them, so a bridged call whose module promises "full
+  context and terminal state" silently lost both. `executeNestedTool` now
+  folds `additionalContexts` and `concluded` (never onto a failure) into the
+  adopted result. (2) The host resolves conditional registrations — MCP tools
+  among them — ONLY with the step's admitted `toolSet`, which the doctor never
+  read or forwarded: the visibility probes (`tools.get`, the `tools.schemas`
+  candidate enumeration behind TOOL_NAME / kind fixes) and the nested batch
+  itself now pass the execution's `toolSet` through, exactly as the host's own
+  declarations expose it. Tests: the batch-shape test pins `toolSet`
+  forwarding; adoption pins context/conclusion carry and the
+  never-conclude-on-a-failure rule. Suite: 434 green.
+
 - **A heal can no longer be swallowed by the host's serialization gate.** The
   live pass caught a clamped read-offset retry whose repaired result came back
   as the bare host error "tool result must be losslessly JSON-serializable",

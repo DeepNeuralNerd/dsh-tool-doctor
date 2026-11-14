@@ -46,7 +46,7 @@ const BRIDGEABLE_TOOLS: ReadonlySet<string> = new Set([
  * @param tools - Tool runtime registry.
  */
 export function isBridgeableDirectCall(
-  exec: Pick<ToolDispatchExecution, "name" | "agent" | "parent">,
+  exec: Pick<ToolDispatchExecution, "name" | "agent" | "parent" | "toolSet">,
   tools: ToolRuntime,
 ): boolean {
   if (exec.parent !== undefined || !BRIDGEABLE_TOOLS.has(exec.name)) return false;
@@ -54,11 +54,12 @@ export function isBridgeableDirectCall(
 
   // The reserved transport is the only reliable plugin-visible indication that
   // this deployment supports Code-Mode recovery. The target itself must also be
-  // visible in the same agent scope: an absent target cannot be made callable
-  // by fabricating a code snippet.
+  // visible in the same agent scope (admitted step set included: conditional
+  // registrations resolve only with it): an absent target cannot be made
+  // callable by fabricating a code snippet.
   return (
     tools.get("run_code", exec.agent) !== undefined &&
-    tools.get(exec.name, exec.agent) !== undefined
+    tools.get(exec.name, exec.agent, exec.toolSet) !== undefined
   );
 }
 

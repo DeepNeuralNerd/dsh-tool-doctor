@@ -83,6 +83,9 @@ export async function executeNestedTool(
     calls: [{ type: "tool-call", id: nestedCallId(parent, suffix), name, arguments: serialized }],
     signal: parent.signal,
     ...(parent.agent === undefined ? {} : { agent: parent.agent }),
+    // Without the step's admitted set, conditional registrations — MCP tools
+    // among them — are invisible to the recovery dispatch itself.
+    ...(parent.toolSet === undefined ? {} : { toolSet: parent.toolSet }),
   };
 
   try {
@@ -93,7 +96,17 @@ export async function executeNestedTool(
         `Nested recovery of '${parent.name}' through '${name}' settled no result.`,
       );
     }
-    return settled;
+    // Adoption is only complete with the child's batch-level payload: the
+    // host delivers deferred contexts and turn-conclusion next to `results`,
+    // not inside a settled result.
+    const contexts = Array.isArray(batch.additionalContexts) ? batch.additionalContexts : [];
+    const concluded = batch.concluded === true && settled.isError !== true;
+    if (contexts.length === 0 && !concluded) return settled;
+    return {
+      ...settled,
+      ...(contexts.length > 0 ? { additionalContexts: contexts } : {}),
+      ...(concluded ? { concludesTurn: true } : {}),
+    };
   } catch (error: unknown) {
     return recoveryFailure(
       `Nested recovery of '${parent.name}' through '${name}' failed: ${

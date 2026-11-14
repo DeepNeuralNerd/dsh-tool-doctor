@@ -33,6 +33,12 @@ export interface ToolDispatchExecution {
   readonly parent?: unknown;
   /** Cancellation signal for the in-flight dispatch, when the host provides one. */
   readonly signal?: AbortSignal;
+  /**
+   * The step's admitted tool set (host `ToolExecution.toolSet`). Conditional
+   * registrations — MCP tools among them — resolve ONLY with it, so recovery
+   * dispatches must carry it or those targets are invisible inside them.
+   */
+  readonly toolSet?: unknown;
 }
 
 /** A content block inside an execution result. */
@@ -87,6 +93,7 @@ export interface ToolBatchInput {
   calls: ToolCallBlock[];
   signal: AbortSignal;
   agent?: unknown;
+  toolSet?: unknown;
 }
 
 /** What the host batch runner settles; one result per submitted call, in order. */
@@ -103,7 +110,7 @@ export interface ToolBatchResult {
  */
 export interface ToolRuntime {
   /** Look up a tool definition in scope; undefined when unregistered there. */
-  get(name: string, scope?: unknown): unknown;
+  get(name: string, scope?: unknown, toolSet?: unknown): unknown;
   /** Re-enter the host's complete execution pipeline with a single-call batch. */
   execute?(input: ToolBatchInput): Promise<ToolBatchResult>;
   /**
