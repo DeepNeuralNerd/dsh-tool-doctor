@@ -4,10 +4,10 @@ import { TOGGLE_KEYS } from "../src/support/config-overrides.ts";
 import type { HealCategory } from "../src/types.ts";
 
 describe("stage registry", () => {
-  it("registers ten stages in execution order (six pre, four post)", () => {
-    expect(STAGES).toHaveLength(10);
-    expect(PRE_STAGES).toHaveLength(6);
-    expect(POST_STAGES).toHaveLength(4);
+  it("registers fourteen stages in execution order (nine pre, five post)", () => {
+    expect(STAGES).toHaveLength(14);
+    expect(PRE_STAGES).toHaveLength(9);
+    expect(POST_STAGES).toHaveLength(5);
     // Pre-stages come first in the registry.
     for (let i = 0; i < PRE_STAGES.length; i++) {
       expect(STAGES[i]).toBe(PRE_STAGES[i]);
@@ -43,12 +43,17 @@ describe("stage registry", () => {
     expect(meta["READ_ARGS"]?.ruleNumber).toBe(1);
     expect(meta["FS_OBSERVED"]?.ruleNumber).toBe(4);
     expect(meta["RESPONSE_TOOL_HEAL"]?.ruleNumber).toBe(7);
+    expect(meta["ARGS_UNWRAP"]?.ruleNumber).toBe(9);
+    expect(meta["ARGS_TYPE"]?.ruleNumber).toBe(9);
+    expect(meta["PATH_SEPARATORS"]?.ruleNumber).toBe(3);
+    expect(meta["EDIT_WHITESPACE"]?.ruleNumber).toBe(4);
 
     // Round-trip savings: a pre-dispatch repair saves one round trip; the
     // observe-retry family costs an extra read, so it is worth two.
     expect(meta["INVALID_ARGS"]?.roundTrips).toBe(1);
     expect(meta["UNKNOWN_TOOL"]?.roundTrips).toBe(1);
     expect(meta["FS_OBSERVED"]?.roundTrips).toBe(2);
+    expect(meta["EDIT_WHITESPACE"]?.roundTrips).toBe(2);
 
     // Every category carries a matchesError predicate except the pure labels.
     for (const category of [
@@ -61,6 +66,10 @@ describe("stage registry", () => {
       "PATH_SCOPE",
       "PATH_QUOTES",
       "READ_ARGS",
+      "ARGS_UNWRAP",
+      "ARGS_TYPE",
+      "PATH_SEPARATORS",
+      "EDIT_WHITESPACE",
     ] as HealCategory[]) {
       expect(typeof meta[category]?.matchesError).toBe("function");
     }
@@ -103,5 +112,8 @@ describe("stage registry", () => {
     // Spot-check the family mapping the fix proposals rely on.
     expect(CATEGORY_TO_FLAG["READ_ARGS"]).toBe("autoClampRanges");
     expect(CATEGORY_TO_FLAG["UNKNOWN_TOOL"]).toBe("autoBridgeDirectTools");
+    expect(CATEGORY_TO_FLAG["ARGS_TYPE"]).toBe("autoSchemaArgs");
+    expect(CATEGORY_TO_FLAG["PATH_SEPARATORS"]).toBe("autoNormalizePaths");
+    expect(CATEGORY_TO_FLAG["EDIT_WHITESPACE"]).toBe("autoFuzzyEdit");
   });
 });

@@ -25,23 +25,35 @@ import { readArgsStage } from "./read-args.ts";
 import { pathScopeStage } from "./path-scope.ts";
 import { pathQuotesStage } from "./path-quotes.ts";
 import { mnemonResultStage } from "./mnemon-result.ts";
+import { argUnwrapStage } from "./arg-unwrap.ts";
+import { typeCoercionStage } from "./type-coercion.ts";
+import { pathNormalizerStage } from "./path-normalizer.ts";
 import { bridgeStage } from "./bridge.ts";
 import { observeRetryStage } from "./observe-retry.ts";
+import { anchorWhitespaceStage } from "./anchor-whitespace.ts";
 import { anchorRefreshStage } from "./anchor-refresh.ts";
 import { rangeRetryStage } from "./range-retry.ts";
 
 /** All stages in execution order: pre-dispatch first, then post-dispatch. */
 export const STAGES: readonly HealStage[] = [
   // ── Pre-dispatch (argument repair before the host sees the call) ──────────
+  // Payload-shape repairs first: later stages assume `arguments` is a real
+  // object holding the tool's own keys with plausibly-typed values.
+  argUnwrapStage,
+  typeCoercionStage,
   runCodeStage,
   editorRangeStage,
   readArgsStage,
+  pathNormalizerStage,
   pathScopeStage,
   pathQuotesStage,
   mnemonResultStage,
   // ── Post-dispatch (recovery after a settled failure) ──────────────────────
+  // Whitespace retry precedes anchor-refresh: a successful retry settles the
+  // dispatch, so the observation refresh only ever runs for real anchor misses.
   bridgeStage,
   observeRetryStage,
+  anchorWhitespaceStage,
   anchorRefreshStage,
   rangeRetryStage,
 ];

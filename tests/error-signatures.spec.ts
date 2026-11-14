@@ -134,6 +134,9 @@ describe("fix proposals", () => {
     errorHints: true,
     persistPassthrough: false,
     healResponseTools: true,
+    autoSchemaArgs: true,
+    autoFuzzyEdit: true,
+    autoNormalizePaths: true,
     shadowMode: false,
   };
   const DAY_MS = 24 * 60 * 60 * 1000;

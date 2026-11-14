@@ -114,6 +114,12 @@ export interface DoctorConfig {
   persistPassthrough: boolean;
   /** Promote tool-call markup found in streamed text into structured tool blocks. */
   healResponseTools: boolean;
+  /** Repair structurally shaped arguments: replayed JSON strings, wrapper nesting, string↔primitive/enum drift. */
+  autoSchemaArgs: boolean;
+  /** Retry old_string-not-found edits once with line-ending/indentation-equivalent variants. */
+  autoFuzzyEdit: boolean;
+  /** Normalize path separators and ~ prefixes in path arguments to the host-expected form. */
+  autoNormalizePaths: boolean;
   /**
    * Shadow mode: evaluate every pre-dispatch repair and record what it WOULD
    * fix, but dispatch the original arguments and run no post-dispatch retries
@@ -132,6 +138,9 @@ export const DEFAULT_CONFIG: DoctorConfig = {
   errorHints: true,
   persistPassthrough: false,
   healResponseTools: true,
+  autoSchemaArgs: true,
+  autoFuzzyEdit: true,
+  autoNormalizePaths: true,
   shadowMode: false,
 };
 
@@ -160,6 +169,10 @@ export const HEAL_CATEGORIES = [
   "MNEMON_RESULT",
   "PASSTHROUGH",
   "RESPONSE_TOOL_HEAL",
+  "ARGS_UNWRAP",
+  "ARGS_TYPE",
+  "PATH_SEPARATORS",
+  "EDIT_WHITESPACE",
 ] as const;
 
 /** One recordable healing category. */

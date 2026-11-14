@@ -137,6 +137,15 @@ export const en = {
   rule8Title: "Passthrough trace persistence",
   rule8Desc:
     "Also persists successful untouched calls in the detailed JSONL trace; aggregate counters are unaffected either way.",
+  ruleSchemaTitle: "Schema-shaped arguments (rule 9)",
+  ruleSchemaDesc:
+    "Repairs structurally wrong arguments only when re-parse proves it: a JSON payload replayed as a string, one-level {\"arguments\":…} wrapper nesting, and string↔number/boolean/array drift where the tool's schema declares the real type.",
+  rulePathsTitle: "Path separator normalization",
+  rulePathsDesc:
+    "Canonicalizes Windows↔POSIX separator drift where the rewrite is lossless and expands ~ home prefixes in path arguments, before the scope and quote rules see them.",
+  ruleFuzzyTitle: "Whitespace-tolerant edit retry",
+  ruleFuzzyDesc:
+    "When an edit reports old_string not found, retries it once per whitespace-equivalent anchor spelling (CRLF↔LF, tabs↔spaces). The host stays the match authority: an ambiguous variant is rejected, never guessed.",
   ruleShadowTitle: "Shadow mode (measure only)",
   ruleShadowDesc:
     "Evaluates every pre-dispatch repair and records what the rules WOULD fix, but dispatches the original arguments and runs no retries or hints — measure a rule's coverage before trusting it to act.",

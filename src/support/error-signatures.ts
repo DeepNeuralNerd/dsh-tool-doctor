@@ -150,8 +150,9 @@ const TEXT_RULE_HINTS: ReadonlyArray<{ rule: number; test: RegExp }> = [
   { rule: 1, test: /\brun_code\b|run[- ]code\s+(?:code|description)/i },
   { rule: 2, test: /unknown tool|tool .*not (?:found|registered)/i },
   { rule: 3, test: /view_range|line (?:range|count)|out[- ]of[- ]range/i },
-  { rule: 4, test: /FS_NOT_OBSERVED|FS_STALE_VERSION|not (?:been )?observed/i },
+  { rule: 4, test: /FS_NOT_OBSERVED|FS_STALE_VERSION|not (?:been )?observed|string to replace|old_string/i },
   { rule: 7, test: /<tool_call|<function=|\[TOOL_CALLS\]/i },
+  { rule: 9, test: /expected (?:a |an )?(?:number|boolean|array|object)|arguments (?:must|should) be|not (?:valid|parseable) JSON/i },
 ];
 
 /** Longest signature kept; longer text is clipped with an ellipsis. */

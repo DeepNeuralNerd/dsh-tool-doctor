@@ -11,6 +11,9 @@ const CONFIG: DoctorConfig = {
   errorHints: true,
   persistPassthrough: false,
   healResponseTools: true,
+  autoSchemaArgs: true,
+  autoFuzzyEdit: true,
+  autoNormalizePaths: true,
   shadowMode: false,
 };
 
