@@ -155,6 +155,7 @@ export const TEXT_RULE_HINTS: ReadonlyArray<{ rule: number; test: RegExp }> = [
   { rule: 7, test: /<tool_call|<function=|\[TOOL_CALLS\]/i },
   { rule: 9, test: /expected (?:a |an )?(?:number|boolean|array|object)|arguments (?:must|should) be|not (?:valid|parseable) JSON/i },
   { rule: 10, test: /not a regular file|is a directory|EISDIR|ENOTDIR|illegal operation on a directory/i },
+  { rule: 11, test: /is not allowed for this session/i },
 ];
 
 /** Longest signature kept; longer text is clipped with an ellipsis. */

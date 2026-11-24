@@ -110,6 +110,36 @@ function getToolRuntime(ctx: HostContext): ToolRuntime | undefined {
   return typeof candidate["get"] === "function" ? (candidate as ToolRuntime) : undefined;
 }
 
+/** Resolve the host llm service lazily (absent on minimal hosts). */
+function getLlmService(ctx: HostContext): LlmRouteSource | undefined {
+  const llm = ctx.get("llm");
+  if (typeof llm !== "object" || llm === null) return undefined;
+  const candidate = llm as Partial<LlmRouteSource>;
+  return typeof candidate.listProviders === "function" ? (candidate as LlmRouteSource) : undefined;
+}
+
+/** The two llm-service methods the route-casing stage consumes. */
+interface LlmRouteSource {
+  listProviders(): readonly unknown[];
+  listModels(provider: string): Promise<readonly unknown[]>;
+}
+
+/**
+ * Bind the llm service's enumeration methods onto the tool-runtime view so
+ * pre-stages reach them through `env.tools` — the one host plane stages are
+ * built to probe. Absent service ⇒ absent fields (the stage stays inert).
+ */
+function bindLlmRouteSource(tools: ToolRuntime, llm: LlmRouteSource | undefined): ToolRuntime {
+  if (llm === undefined) return tools;
+  const bound = Object.create(tools) as ToolRuntime & {
+    listProviders(): readonly unknown[];
+    listModels(provider: string): Promise<readonly unknown[]>;
+  };
+  bound.listProviders = () => llm.listProviders();
+  bound.listModels = (provider: string) => llm.listModels(provider);
+  return bound;
+}
+
 /** The minimal host surface the adapter needs, typed at this boundary. */
 interface HostContext {
   get(name: string): unknown;
@@ -547,6 +577,18 @@ export function apply(ctxRaw: unknown, userConfig: Partial<DoctorConfig> = {}): 
 
   const getTools = (): ToolRuntime | undefined => getToolRuntime(ctx);
   const getMeter = (): SessionTokenMeter | undefined => readTokenMeter(ctx);
+  // Route enumeration (providers/models) rides the tool-runtime view, bound
+  // once per host composition: pre-stages probe `env.tools` only.
+  let toolsWithRoutes: ToolRuntime | undefined;
+  const getToolsWithRoutes = (): ToolRuntime | undefined => {
+    if (toolsWithRoutes === undefined) {
+      const tools = getTools();
+      if (tools !== undefined) {
+        toolsWithRoutes = bindLlmRouteSource(tools, getLlmService(ctx));
+      }
+    }
+    return toolsWithRoutes;
+  };
 
   // ── Dispatch interception (the engine does the work) ─────────────────────
   ctx.on(
@@ -559,7 +601,7 @@ export function apply(ctxRaw: unknown, userConfig: Partial<DoctorConfig> = {}): 
 
       const startTime = Date.now();
       const eventId = `norm_${startTime}_${Math.random().toString(36).slice(2, 8)}`;
-      const tools = getTools();
+      const tools = getToolsWithRoutes();
       const meter = getMeter();
       const savedTokens = (healed: boolean, ok: boolean, category: NormalizerRecord["category"]): number =>
         healed && ok ? measureTokensSaved(meter, exec.agent, avoidedRoundTrips(category)) : 0;

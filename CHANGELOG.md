@@ -3,6 +3,42 @@
 All notable changes to **Tool doctor** are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Subagent route casing rule (`autoSubagentRouteFixes`, rule 11).** Models
+  emit provider/model ids with casing copied from prose (`LMStudio` for
+  `lmstudio`, `Qwen3.8-Next-NVFP4` for the route id) and the session's
+  route allow-list rejects the call outright — 4 live ledger hits in this
+  machine's history. DSH resolves both ids case-insensitively, so a casing
+  slip is a pure emission fault with exactly one correct fix: the host's own
+  spelling, read from the `llm` service (`listProviders` / `listModels`,
+  verified against the installed API catalog) and bound onto the tool-runtime
+  view by the adapter. Unique case-insensitive match ⇒ adopt; zero or
+  multiple ⇒ abstain. Pre-stages never await: model lists are fetched once
+  per provider without blocking, so the first call naming a provider may
+  pass through, every later one is repaired.
+
+- **Two stringified-args ladder steps, shipped from the 2026-11-14 review
+  packet (REC-1, REC-2).** Brace completion: a streaming parser can truncate
+  the tail of an args object (vLLM #22885); a string-aware stack scan appends
+  exactly the demanded closers and adopts the rewrite only when the result
+  strict-parses to an unambiguous plain object. Python-literal payload: the
+  gateway can deliver a Python repr (`{'k': True, 'offset': None}`) as a JSON
+  string or raw; single→double quoting and `True/False/None` swap run AFTER
+  every strict-JSON step, and the parse gate rejects every risky case. Worst
+  outcome of both steps is "no repair", never "wrong repair".
+
+### Changed
+
+- **`mnemon_subagent_result` fills cover the two shapes still failing after
+  the wrapper fix (ledger audit, 2026-11-24).** A `result` delivered as a
+  JSON string of an object is parsed and adopted; a `result` wrapping exactly
+  one plain `result` key is unwrapped once. Both fill paths now run against
+  the normalized object, so a string payload with inner `steps`/`summary`
+  gaps gets shaped and filled in one pass.
+
 ## [1.1.0] — 2026-11-14
 
 ### Changed

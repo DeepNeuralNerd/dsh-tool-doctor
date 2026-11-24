@@ -45,6 +45,7 @@ export const CATEGORY_LABELS: Readonly<Record<HealCategory, string>> = {
   TOOL_NAME: "Tool-name canonicalization",
   KIND_CORRECTION: "Directory-read kind correction",
   PARAM_ALIAS: "Canonical parameter rename",
+  SUBAGENT_ROUTE: "Subagent route casing canonicalization",
 };
 
 /** Recordable categories in registry order — mirrors HEAL_CATEGORIES. */
@@ -53,7 +54,7 @@ export const CATEGORY_ORDER: readonly HealCategory[] = [
   "RUN_CODE_DESC", "RUN_CODE_SYNTAX", "INNER_DESC", "FS_OBSERVED", "READ_ARGS",
   "PATH_QUOTES", "MNEMON_RESULT", "PASSTHROUGH", "RESPONSE_TOOL_HEAL",
   "ARGS_UNWRAP", "ARGS_TYPE", "PATH_SEPARATORS", "EDIT_WHITESPACE",
-  "TOOL_NAME", "KIND_CORRECTION", "PARAM_ALIAS",
+  "TOOL_NAME", "KIND_CORRECTION", "PARAM_ALIAS", "SUBAGENT_ROUTE",
 ];
 
 /**
@@ -68,7 +69,7 @@ export const CATEGORY_TO_RULE: Readonly<Partial<Record<HealCategory, number>>> =
   UNKNOWN_TOOL: 2, TOOL_NAME: 2, KIND_CORRECTION: 10, FS_OBSERVED: 4,
   EDIT_WHITESPACE: 4, INVALID_ARGS: 1, CODE_WRAP: 1, RUN_CODE_DESC: 1,
   RUN_CODE_SYNTAX: 1, INNER_DESC: 1, RESPONSE_TOOL_HEAL: 7,
-  PARAM_ALIAS: 9,
+  PARAM_ALIAS: 9, SUBAGENT_ROUTE: 11,
 };
 
 /** Error-text hints toward an existing rule for failures no rule processed — mirrors TEXT_RULE_HINTS. */
@@ -80,6 +81,7 @@ export const TEXT_RULE_HINTS: ReadonlyArray<{ rule: number; test: RegExp }> = [
   { rule: 7, test: /<tool_call|<function=|\[TOOL_CALLS\]/i },
   { rule: 9, test: /expected (?:a |an )?(?:number|boolean|array|object)|arguments (?:must|should) be|not (?:valid|parseable) JSON/i },
   { rule: 10, test: /not a regular file|is a directory|EISDIR|ENOTDIR|illegal operation on a directory/i },
+  { rule: 11, test: /is not allowed for this session/i },
 ];
 
 /** Config flag that gates each category's repairs — mirrors CATEGORY_TO_FLAG. */
@@ -94,7 +96,7 @@ export const CATEGORY_TO_FLAG: Readonly<Partial<Record<HealCategory, ConfigFlag>
   ARGS_UNWRAP: "autoSchemaArgs", ARGS_TYPE: "autoSchemaArgs",
   PATH_SEPARATORS: "autoNormalizePaths", EDIT_WHITESPACE: "autoFuzzyEdit",
   TOOL_NAME: "autoBridgeDirectTools", KIND_CORRECTION: "autoKindFixes",
-  PARAM_ALIAS: "autoSchemaArgs",
+  PARAM_ALIAS: "autoSchemaArgs", SUBAGENT_ROUTE: "autoSubagentRouteFixes",
 };
 
 /** Flags carrying each rule's repairs, registry order — mirrors RULE_FLAGS. */
@@ -205,6 +207,7 @@ export const RULES: ReadonlyArray<{
   { flag: "autoNormalizePaths", titleKey: "rulePathsTitle", descKey: "rulePathsDesc" },
   { flag: "autoFuzzyEdit", titleKey: "ruleFuzzyTitle", descKey: "ruleFuzzyDesc" },
   { flag: "autoKindFixes", titleKey: "ruleKindTitle", descKey: "ruleKindDesc" },
+  { flag: "autoSubagentRouteFixes", titleKey: "ruleRouteTitle", descKey: "ruleRouteDesc" },
   { flag: "shadowMode", titleKey: "ruleShadowTitle", descKey: "ruleShadowDesc" },
 ];
 
@@ -224,6 +227,7 @@ export const RULE_GROUPS: ReadonlyArray<{
       "autoBridgeDirectTools",
       "autoSchemaArgs",
       "autoKindFixes",
+      "autoSubagentRouteFixes",
       "autoFuzzyEdit",
       "autoClampRanges",
       "autoNormalizePaths",

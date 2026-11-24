@@ -180,4 +180,74 @@ describe("repairArgsPayload", () => {
       expect((result!.args as Record<string, unknown>).plain).toBe(2);
     });
   });
+
+  describe("brace completion (REC-1 ladder step)", () => {
+    it("adopts a payload missing exactly one closing brace", () => {
+      const result = repairArgsPayload('{"file_path":"C:\\\\tmp\\\\a.txt","limit":10');
+      expect(result).toBeDefined();
+      expect(result!.args).toEqual({ file_path: "C:\\tmp\\a.txt", limit: 10 });
+    });
+
+    it("adopts a payload missing a nested closer pair", () => {
+      const result = repairArgsPayload('{"items":[1,2,{"x":3');
+      expect(result).toBeDefined();
+      expect(result!.args).toEqual({ items: [1, 2, { x: 3 }] });
+    });
+
+    it("never completes a brace that sits inside a quoted string", () => {
+      // The brace is inside the value and the object is already closed: the
+      // payload strict-parses at the plain step, so no completion is claimed.
+      const result = repairArgsPayload('{"note":"a { brace stays"}');
+      expect(result?.changes).toContain("plain JSON.parse");
+    });
+
+    it("completes braces demanded outside strings but keeps string braces", () => {
+      // The value's inner brace is balanced and quoted; only the outer object
+      // is missing its closer.
+      const result = repairArgsPayload('{"note":"a { brace inside"');
+      expect(result).toBeDefined();
+      expect(result!.args).toEqual({ note: "a { brace inside" });
+    });
+
+    it("abstains when completion cannot produce valid JSON", () => {
+      expect(repairArgsPayload('{"a":')).toBeUndefined();
+    });
+
+    it("abstains on text that is not an object at all", () => {
+      expect(repairArgsPayload('hello world')).toBeUndefined();
+    });
+  });
+
+  describe("python-literal payload (REC-2 ladder step)", () => {
+    it("adopts a gateway-wrapped repr payload", () => {
+      const result = repairArgsPayload("\"{'file_path': 'C:\\\\\\\\tmp\\\\\\\\x', 'limit': 5, 'force': True}\"");
+      expect(result).toBeDefined();
+      expect(result!.args).toEqual({ file_path: "C:\\tmp\\x", limit: 5, force: true });
+    });
+
+    it("adopts an unwrapped repr payload", () => {
+      const result = repairArgsPayload("{'offset': None, 'limit': 10}");
+      expect(result).toBeDefined();
+      expect(result!.args).toEqual({ offset: null, limit: 10 });
+    });
+
+    it("abstains on an apostrophe inside a value (ambiguous quoting)", () => {
+      expect(repairArgsPayload("\"{'note': it's fine'}\"")).toBeUndefined();
+    });
+
+    it("never touches a valid JSON payload (strict steps run first)", () => {
+      // Any payload that already strict-parses must not reach the conversion.
+      expect(repairArgsPayload({ ok: true })).toBeUndefined();
+      const valid = repairArgsPayload('"{\\"ok\\": true}"');
+      expect(valid?.changes).not.toContain("python-literal payload");
+    });
+
+    it("abstains on a python-looking list payload", () => {
+      expect(repairArgsPayload("[1, 2, 3]")).toBeUndefined();
+    });
+
+    it("abstains on a quoted string that holds no object", () => {
+      expect(repairArgsPayload("\"just a string\"")).toBeUndefined();
+    });
+  });
 });

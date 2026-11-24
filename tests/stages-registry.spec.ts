@@ -4,9 +4,9 @@ import { TOGGLE_KEYS } from "../src/support/config-overrides.ts";
 import type { HealCategory } from "../src/types.ts";
 
 describe("stage registry", () => {
-  it("registers seventeen stages in execution order (ten pre, seven post)", () => {
-    expect(STAGES).toHaveLength(17);
-    expect(PRE_STAGES).toHaveLength(10);
+  it("registers eighteen stages in execution order (eleven pre, seven post)", () => {
+    expect(STAGES).toHaveLength(18);
+    expect(PRE_STAGES).toHaveLength(11);
     expect(POST_STAGES).toHaveLength(7);
     // Pre-stages come first in the registry.
     for (let i = 0; i < PRE_STAGES.length; i++) {
@@ -48,6 +48,7 @@ describe("stage registry", () => {
     expect(meta["PARAM_ALIAS"]?.ruleNumber).toBe(9);
     expect(meta["PATH_SEPARATORS"]?.ruleNumber).toBe(3);
     expect(meta["EDIT_WHITESPACE"]?.ruleNumber).toBe(4);
+    expect(meta["SUBAGENT_ROUTE"]?.ruleNumber).toBe(11);
 
     // Round-trip savings: a pre-dispatch repair saves one round trip; the
     // observe-retry family costs an extra read, so it is worth two.
@@ -71,6 +72,7 @@ describe("stage registry", () => {
       "ARGS_TYPE",
       "PATH_SEPARATORS",
       "EDIT_WHITESPACE",
+      "SUBAGENT_ROUTE",
     ] as HealCategory[]) {
       expect(typeof meta[category]?.matchesError).toBe("function");
     }
@@ -117,5 +119,6 @@ describe("stage registry", () => {
     expect(CATEGORY_TO_FLAG["PARAM_ALIAS"]).toBe("autoSchemaArgs");
     expect(CATEGORY_TO_FLAG["PATH_SEPARATORS"]).toBe("autoNormalizePaths");
     expect(CATEGORY_TO_FLAG["EDIT_WHITESPACE"]).toBe("autoFuzzyEdit");
+    expect(CATEGORY_TO_FLAG["SUBAGENT_ROUTE"]).toBe("autoSubagentRouteFixes");
   });
 });

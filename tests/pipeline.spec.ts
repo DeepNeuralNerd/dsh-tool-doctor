@@ -15,6 +15,7 @@ const CONFIG: DoctorConfig = {
   autoFuzzyEdit: true,
   autoNormalizePaths: true,
   autoKindFixes: true,
+  autoSubagentRouteFixes: false,
   shadowMode: false,
 };
 

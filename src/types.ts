@@ -126,6 +126,20 @@ export interface ToolRuntime {
    * degrade honestly when a host exposes less than the current one does.
    */
   schemas?(scope?: unknown, toolSet?: unknown): readonly { readonly name: string }[];
+  /**
+   * Enumerate the configured LLM providers — the host LlmService method
+   * (`listProviders(): LlmProviderInfo[]`, verified against the installed API
+   * catalog). Declared optional like `schemas`; the adapter binds it from the
+   * llm service onto this view once per composition. Subagent-route stage.
+   */
+  listProviders?(): readonly unknown[];
+  /**
+   * Enumerate one provider's model list — the host LlmService method
+   * (`listModels(provider): Promise<LlmModelInfo[]>`), bound by the adapter
+   * like `listProviders`. Async and provider-scoped; consumers cache by
+   * provider and degrade honestly on any throw.
+   */
+  listModels?(provider: string): Promise<readonly unknown[]>;
 }
 
 // ── Plugin configuration ─────────────────────────────────────────────────────
@@ -162,6 +176,8 @@ export interface DoctorConfig {
   autoNormalizePaths: boolean;
   /** Re-dispatch a directory read (and other kind mistakes) to the right-shaped live tool. */
   autoKindFixes: boolean;
+  /** Canonicalize subagent provider/model casing against the host's model-route enumeration. */
+  autoSubagentRouteFixes: boolean;
   /**
    * Shadow mode: evaluate every pre-dispatch repair and record what it WOULD
    * fix, but dispatch the original arguments and run no post-dispatch retries
@@ -184,6 +200,7 @@ export const DEFAULT_CONFIG: DoctorConfig = {
   autoFuzzyEdit: true,
   autoNormalizePaths: true,
   autoKindFixes: true,
+  autoSubagentRouteFixes: true,
   shadowMode: false,
 };
 
@@ -219,6 +236,7 @@ export const HEAL_CATEGORIES = [
   "TOOL_NAME",
   "KIND_CORRECTION",
   "PARAM_ALIAS",
+  "SUBAGENT_ROUTE",
 ] as const;
 
 /** One recordable healing category. */

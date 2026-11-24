@@ -138,6 +138,7 @@ describe("fix proposals", () => {
     autoFuzzyEdit: true,
     autoNormalizePaths: true,
     autoKindFixes: true,
+  autoSubagentRouteFixes: false,
     shadowMode: false,
   };
   const DAY_MS = 24 * 60 * 60 * 1000;

@@ -200,7 +200,164 @@ function parseWithRecovery(raw: string): { value: Record<string, unknown>; chang
     }
   } catch {}
 
+  // Step f: brace completion (REC-1, reviewer packet 2026-11-14). Streaming
+  // parsers truncate the tail of an args object (vLLM #22885; fragment issues
+  // #10589/#9874): the payload arrives missing its closing brackets. A
+  // string-aware stack scan (never inside a quoted string) collects the
+  // demanded closers; the rewrite is adopted only when appending EXACTLY them,
+  // in stack order, yields an unambiguous plain object. Never adds keys or
+  // quotes; truncation means the content beyond the cut is already lost.
+  const withBracesCompleted = completeOpenBrackets(raw);
+  if (withBracesCompleted !== undefined) {
+    const parsed = parseUnambiguousObject(withBracesCompleted);
+    if (parsed) {
+      return { value: parsed, changes: ["complete closing brackets", "JSON.parse"] };
+    }
+  }
+
+  // Step g: python-literal payload (REC-2, reviewer packet 2026-11-14).
+  // Open-model parsers emit Python reprs, but the gateway delivers the payload
+  // as a JSON string, so the repr arrives wrapped and escaped:
+  //   "{'file_path': 'C:\\x', 'limit': True}"
+  // Accepted shapes: a valid JSON string whose CONTENT is a python repr
+  // (single-quoted, no double quotes inside, brace/bracket start), or a raw
+  // repr when the transport delivered the text unwrapped. Converted only
+  // AFTER every strict-JSON step, so a valid-JSON payload is never touched;
+  // the unambiguous-plain-object parse gate rejects every risky case
+  // (apostrophes inside values break the conversion and parse fails). Worst
+  // observed outcome is "no repair".
+  const pythonCandidate = pythonPayloadCandidate(raw);
+  if (pythonCandidate !== undefined) {
+    const asJsonLiteral = convertPythonLiteral(pythonCandidate);
+    if (asJsonLiteral !== undefined) {
+      const parsed = parseUnambiguousObject(asJsonLiteral);
+      if (parsed) {
+        return { value: parsed, changes: ["python-literal payload", "JSON.parse"] };
+      }
+    }
+  }
+
   return null;
+}
+
+/**
+ * Extract the python-repr payload from either delivery shape:
+ *  1. a valid JSON STRING whose content starts with `{`/`[` and contains no
+ *     double quotes (a repr wrapped by the gateway), or
+ *  2. the raw text itself when it starts with `{`/`[` and contains no double
+ *     quotes (an unwrapped repr; text that strict-parsed never reaches here).
+ * Returns undefined for anything else.
+ */
+function pythonPayloadCandidate(raw: string): string | undefined {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    try {
+      const inner = JSON.parse(trimmed);
+      if (typeof inner !== "string") return undefined;
+      const content = inner.trim();
+      if (!(content.startsWith("{") || content.startsWith("["))) return undefined;
+      if (content.includes('"') || content.includes("'") === false) return undefined;
+      return content;
+    } catch {
+      return undefined; // not a JSON string at all
+    }
+  }
+  if (!(trimmed.startsWith("{") || trimmed.startsWith("["))) return undefined;
+  if (trimmed.includes('"') || trimmed.includes("'") === false) return undefined;
+  return trimmed;
+}
+
+/**
+ * REC-1 brace completion. Scans outside strings, maintaining a stack of open
+ * `{`/`[`; returns the input plus the exact closer sequence (stack order) when
+ * the stack is non-empty at the end and no closer appeared after the last
+ * opener was demanded; undefined when there is nothing to append or the scan
+ * looks structurally broken (a closer with no opener).
+ */
+function completeOpenBrackets(input: string): string | undefined {
+  const trimmed = input.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return undefined;
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < trimmed.length; i++) {
+    const ch = trimmed[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') { inString = true; continue; }
+    if (ch === "{" || ch === "[") stack.push(ch);
+    else if (ch === "}" || ch === "]") {
+      const open = stack.pop();
+      if (open === undefined) return undefined;
+      if ((open === "{" && ch !== "}") || (open === "[" && ch !== "]")) return undefined;
+    }
+  }
+  if (inString || stack.length === 0) return undefined;
+  const closers = stack.reverse().map((open) => (open === "{" ? "}" : "]")).join("");
+  return trimmed + closers;
+}
+
+/**
+ * REC-2 python-literal conversion. Conservative: only runs when the text has
+ * no double quotes at all outside… (checked before conversion), maps single-
+ * quoted strings to double-quoted with proper escaping, and swaps the bare
+ * words True/False/None outside strings for true/false/null. Any apostrophe
+ * inside a value or any leftover imbalance simply fails the parse gate.
+ */
+function convertPythonLiteral(input: string): string | undefined {
+  const trimmed = input.trim();
+  if (!(trimmed.startsWith("{") || trimmed.startsWith("["))) return undefined;
+  if (trimmed.includes('"')) return undefined; // mixed quoting: too risky
+  if (!/'/.test(trimmed)) return undefined;    // nothing to convert
+
+  let out = "";
+  let inString = false;
+  let i = 0;
+  const n = trimmed.length;
+  while (i < n) {
+    const ch = trimmed[i];
+    if (!inString) {
+      if (ch === "'") { inString = true; out += '"'; i++; continue; }
+      // bare-word literal replacement (not inside a string, not part of a
+      // longer identifier: require a non-identifier boundary on both sides)
+      const word = /^(True|False|None)(?![A-Za-z0-9_])/.exec(trimmed.slice(i));
+      if (word && /[\s,:[{]|^$/.test(i === 0 ? "" : trimmed[i - 1])) {
+        out += word[1] === "True" ? "true" : word[1] === "False" ? "false" : "null";
+        i += word[0].length;
+        continue;
+      }
+      out += ch;
+      i++;
+      continue;
+    }
+    // inside a single-quoted python string: re-escape for JSON
+    if (ch === "\\") {
+      const next = trimmed[i + 1];
+      if (next === undefined) return undefined;
+      switch (next) {
+        case "\\": out += "\\\\"; break;
+        case "'": out += "'"; break;
+        case '"': out += '\\"'; break;
+        case "n": out += "\\n"; break;
+        case "t": out += "\\t"; break;
+        case "r": out += "\\r"; break;
+        default: out += "\\\\" + next; break; // keep the escape pair verbatim
+      }
+      i += 2;
+      continue;
+    }
+    if (ch === "'") { inString = false; out += '"'; i++; continue; }
+    if (ch === '"') { out += '\\"'; i++; continue; }
+    if (ch === "\n") return undefined; // a raw newline inside a value: not JSON-valid
+    out += ch;
+    i++;
+  }
+  if (inString) return undefined;
+  return out;
 }
 
 export function repairArgsPayload(rawArgs: unknown): ArgUnwrapResult | undefined {

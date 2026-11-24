@@ -224,6 +224,9 @@ export const en = {
   ruleKindTitle: "Directory kind correction (rule 10)",
   ruleKindDesc:
     'When a file reader hits a directory ("not a regular file"/EISDIR), the intent is unambiguous — the model wants the folder\'s contents — so the call is re-dispatched to a listing tool the agent can actually call, with arguments built from that tool\'s own definition. No listing tool in scope: the original error stands.',
+  ruleRouteTitle: "Subagent route casing (rule 11)",
+  ruleRouteDesc:
+    "Provider and model ids are matched case-insensitively by the host, but models emit route casing copied from prose (LMStudio for lmstudio). The emitted id is replaced with the host's exact spelling only when the model-route list contains exactly one case-insensitive match; zero or multiple candidates pass through untouched.",
   ruleShadowTitle: "Shadow mode (measure only)",
   ruleShadowDesc:
     "Evaluates every pre-dispatch repair and records what the rules WOULD fix, but dispatches the original arguments and runs no retries or hints — measure a rule's coverage before trusting it to act.",

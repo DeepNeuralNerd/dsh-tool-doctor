@@ -28,6 +28,7 @@ import { mnemonResultStage } from "./mnemon-result.ts";
 import { argUnwrapStage } from "./arg-unwrap.ts";
 import { typeCoercionStage } from "./type-coercion.ts";
 import { paramAliasStage } from "./param-alias.ts";
+import { subagentRouteStage } from "./subagent-route.ts";
 import { pathNormalizerStage } from "./path-normalizer.ts";
 import { bridgeStage } from "./bridge.ts";
 import { toolNameStage } from "./tool-name.ts";
@@ -54,6 +55,9 @@ export const STAGES: readonly HealStage[] = [
   pathScopeStage,
   pathQuotesStage,
   mnemonResultStage,
+  // Route casing follows the argument family: it reads the host's model
+  // enumeration, not the tool's schema, so it can run last among pre-stages.
+  subagentRouteStage,
   // ── Post-dispatch (recovery after a settled failure) ──────────────────────
   // Whitespace retry precedes anchor-refresh: a successful retry settles the
   // dispatch, so the observation refresh only ever runs for real anchor misses.

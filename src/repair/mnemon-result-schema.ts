@@ -1,11 +1,13 @@
 /**
  * Schema-gap repair for `mnemon_subagent_result` payloads.
  *
- * Candidate evidence (tool-healer history, 2026-11-13): the tool's inner
- * `result` schema is per-request ("from its completion instructions"), so
- * models keep tripping over required fields they expressed under a sibling
- * name instead:
+ * Candidate evidence (tool-healer history, 2026-11-13; one more shape after
+ * the 2026-11-24 ledger audit): the tool's inner `result` schema is per-request
+ * ("from its completion instructions"), so models keep tripping over required
+ * fields they expressed under a sibling name, or delivered as a JSON string:
  *
+ * - `result.result must be an object` — the whole payload delivered as a
+ *   string ("{\"summary\": …}") or nested one level too deep (`result.result`).
  * - `result.suggestions[<n>].steps is required` — the suggestion carried a
  *   single `text` string where an array of step strings was expected.
  * - `result.answer is required` — the child reported its work as `steps` /
@@ -13,6 +15,8 @@
  *
  * The repair only moves content that already exists into the shape the host
  * demands; it never invents text:
+ * 0. A `result` delivered as a JSON string of a plain object is parsed and
+ *    adopted; a `result` wrapping exactly one plain `result` key is unwrapped.
  * 1. A suggestion missing `steps` gains `[text]` when its own non-empty string
  *    `text` is present (and a bare-string `steps` is wrapped in an array). No
  *    sibling content, no fill — the host rejection stays honest.
@@ -62,17 +66,44 @@ export function repairMnemonResultArgs(
   if (!isPlainObject(rawArgs)) return undefined;
 
   const result = rawArgs["result"];
-  if (!isPlainObject(result)) return undefined;
 
   let argsCopy: Record<string, unknown> | undefined;
   let resultCopy: Record<string, unknown> | undefined;
   const changes: string[] = [];
 
+  // 0. The host requires a plain-object `result`. Two wrong shapes still carry
+  //    exactly that object: a JSON string of it (adopt only when it parses to
+  //    a plain object, like the argument-unwrap ladder), or one extra
+  //    `{result: …}` nesting level (unwrap once, like the argument envelope).
+  if (typeof result === "string") {
+    try {
+      const parsed: unknown = JSON.parse(result);
+      if (isPlainObject(parsed)) {
+        argsCopy ??= { ...rawArgs };
+        argsCopy["result"] = parsed;
+    changes.push("Parsed the JSON-string result payload to an object");
+      }
+    } catch {
+      /* not JSON: the host rejection stays honest */
+    }
+  } else if (
+    isPlainObject(result) &&
+    Object.keys(result).length === 1 &&
+    isPlainObject(result["result"])
+  ) {
+    argsCopy ??= { ...rawArgs };
+    argsCopy["result"] = result["result"];
+    changes.push("Unwrapped the doubly nested result object");
+  }
+
+  const resultObj: unknown = argsCopy !== undefined ? argsCopy["result"] : result;
+
   // 1. Suggestions: `steps` is the required array; a sibling `text` string or
   //    a bare-string `steps` both carry the same content in the wrong shape.
-  if (Array.isArray(result["suggestions"])) {
+  const suggestions = isPlainObject(resultObj) ? resultObj["suggestions"] : undefined;
+  if (Array.isArray(suggestions)) {
     let suggestionsCopy: unknown[] | undefined;
-    result["suggestions"].forEach((entry, index) => {
+    suggestions.forEach((entry, index) => {
       if (!isPlainObject(entry)) return;
 
       let entryCopy: Record<string, unknown> | undefined;
@@ -88,13 +119,13 @@ export function repairMnemonResultArgs(
       }
 
       if (entryCopy !== undefined) {
-        suggestionsCopy ??= [...(result["suggestions"] as unknown[])];
+        suggestionsCopy ??= [...(suggestions as unknown[])];
         suggestionsCopy[index] = entryCopy;
       }
     });
 
     if (suggestionsCopy !== undefined) {
-      resultCopy ??= { ...result };
+      resultCopy ??= { ...(resultObj as Record<string, unknown>) };
       resultCopy["suggestions"] = suggestionsCopy;
     }
   }
@@ -103,18 +134,21 @@ export function repairMnemonResultArgs(
   //    never from nothing. Steps first (the full report), summary as the
   //    condensed fallback. Neither field is rewritten above, so the original
   //    values are authoritative here.
-  if (result["answer"] === undefined) {
-    const steps = result["steps"];
+  const baseResult = (resultCopy ?? (isPlainObject(resultObj) ? resultObj : undefined)) as
+    | Record<string, unknown>
+    | undefined;
+  if (baseResult !== undefined && baseResult["answer"] === undefined) {
+    const steps = baseResult["steps"];
     let answer: string | undefined;
     if (Array.isArray(steps)) {
       const lines = steps.filter((step): step is string => hasText(step));
       if (lines.length > 0) answer = lines.join("\n");
     }
-    if (answer === undefined && hasText(result["summary"])) {
-      answer = String(result["summary"]);
+    if (answer === undefined && hasText(baseResult["summary"])) {
+      answer = String(baseResult["summary"]);
     }
     if (answer !== undefined) {
-      resultCopy ??= { ...result };
+      resultCopy ??= { ...baseResult };
       resultCopy["answer"] = answer;
       changes.push(
         Array.isArray(steps) && steps.length > 0
@@ -124,8 +158,10 @@ export function repairMnemonResultArgs(
     }
   }
 
-  if (resultCopy === undefined) return undefined;
-  argsCopy ??= { ...rawArgs };
-  argsCopy["result"] = resultCopy;
+  if (resultCopy !== undefined) {
+    argsCopy ??= { ...rawArgs };
+    argsCopy["result"] = resultCopy;
+  }
+  if (argsCopy === undefined) return undefined;
   return { args: argsCopy, changes };
 }
