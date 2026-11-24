@@ -246,6 +246,12 @@ describe("repairArgsPayload", () => {
       expect(repairArgsPayload("[1, 2, 3]")).toBeUndefined();
     });
 
+    it("refuses a wrapped repr whose JSON text repeats a member name", () => {
+      // Same RFC 8259 bar every other ladder step enforces: a duplicated key
+      // in the converted text is a silent last-wins swap, never adopted.
+      expect(repairArgsPayload("\"{'a': 1, 'a': 2}\"")).toBeUndefined();
+    });
+
     it("abstains on a quoted string that holds no object", () => {
       expect(repairArgsPayload("\"just a string\"")).toBeUndefined();
     });

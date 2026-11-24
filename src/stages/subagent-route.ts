@@ -44,7 +44,11 @@ const inflight = new Set<string>();
  * keeps the stage inert.
  */
 function providerIds(env: StageEnv): readonly string[] | undefined {
-  if (providerCache !== undefined) return providerCache || undefined;
+  if (providerCache !== undefined) {
+    // false = the plane was absent or answered empty on the first probe: the
+    // stage stays inert for the process, no refetch per call.
+    return providerCache || undefined;
+  }
   const tools = env.tools;
   if (typeof tools?.listProviders !== "function") return undefined;
   let built: readonly string[] | false | undefined;

@@ -17,6 +17,10 @@
  * demands; it never invents text:
  * 0. A `result` delivered as a JSON string of a plain object is parsed and
  *    adopted; a `result` wrapping exactly one plain `result` key is unwrapped.
+ *    These shapes adopt content whose text may repeat a member name, matching
+ *    the mnemon rule's own historical behavior (it predates the unwrap
+ *    ladder's stricter RFC 8259 duplicate guard, added the same day); the
+ *    duplicate risk on this narrow tool is accepted, not overlooked.
  * 1. A suggestion missing `steps` gains `[text]` when its own non-empty string
  *    `text` is present (and a bare-string `steps` is wrapped in an array). No
  *    sibling content, no fill — the host rejection stays honest.
@@ -81,7 +85,7 @@ export function repairMnemonResultArgs(
       if (isPlainObject(parsed)) {
         argsCopy ??= { ...rawArgs };
         argsCopy["result"] = parsed;
-    changes.push("Parsed the JSON-string result payload to an object");
+        changes.push("Parsed the JSON-string result payload to an object");
       }
     } catch {
       /* not JSON: the host rejection stays honest */

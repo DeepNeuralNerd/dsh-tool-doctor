@@ -280,8 +280,23 @@ function completeOpenBrackets(input: string): string | undefined {
   const stack: string[] = [];
   let inString = false;
   let escaped = false;
+  let inLiteralWord = false;
   for (let i = 0; i < trimmed.length; i++) {
     const ch = trimmed[i];
+    // A bare-word run (python True/False/None emitted as-is) may legally
+    // contain a closer ("None}") — skip such runs whole so the stack stays
+    // honest. Real JSON never reaches this: it strict-parses at an earlier step.
+    if (!inString && !inLiteralWord && /[A-Za-z]/.test(ch) && !/[A-Za-z]/.test(trimmed[i - 1] ?? "")) {
+      let j = i;
+      while (j < trimmed.length && /[A-Za-z]/.test(trimmed[j])) j++;
+      if (/^(True|False|None)$/.test(trimmed.slice(i, j))) inLiteralWord = true;
+      i = j - 1;
+      continue;
+    }
+    if (inLiteralWord) {
+      if (ch === "," || ch === ":" || ch === "]" || ch === "}" || /\s/.test(ch)) inLiteralWord = false;
+      else continue; // a closer inside the word: ignore for the stack
+    }
     if (inString) {
       if (escaped) escaped = false;
       else if (ch === "\\") escaped = true;
