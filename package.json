@@ -1,7 +1,7 @@
 {
   "name": "dsh-tool-doctor",
   "description": "Repair common DeepSeek Harness tool-call mistakes and review the results in a local dashboard.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "DeepNeuralNerd",
   "homepage": "https://github.com/DeepNeuralNerd/dsh-tool-doctor#readme",
   "repository": {
